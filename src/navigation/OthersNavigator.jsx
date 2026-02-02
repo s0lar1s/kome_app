@@ -1,13 +1,13 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import ClientCardsScreen from "../screens/ClientCardsScreen";
+import OthersScreen from "../screens/OthersScreen";
 
 
-export default function ClientCardsNavigator() {
+export default function OthersNavigator() {
     const Stack = createNativeStackNavigator();
 
     return (
         <Stack.Navigator>
-            <Stack.Screen name="ClientCards" component={ClientCardsScreen} />
+            <Stack.Screen name="Others" component={OthersScreen} />
         </Stack.Navigator>
     );
 }

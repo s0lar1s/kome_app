@@ -1,9 +1,9 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-export default function HomeScreen() {
+export default function CodesScreen() {
   return (
         <View style={styles.container}>
-          <Text>Info Screen Show</Text>
+          <Text>Promo codes</Text>
         </View>
   );
 }
