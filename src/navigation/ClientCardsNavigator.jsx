@@ -7,7 +7,13 @@ export default function ClientCardsNavigator() {
 
     return (
         <Stack.Navigator>
-            <Stack.Screen name="ClientCards" component={ClientCardsScreen} />
+            <Stack.Screen 
+            name="Client - Cards" 
+            component={ClientCardsScreen}
+            options={{
+                title: "Клиентски карти", // 👈 това ще е табелката
+            }}
+            />
         </Stack.Navigator>
     );
 }

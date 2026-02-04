@@ -7,7 +7,13 @@ export default function OthersNavigator() {
 
     return (
         <Stack.Navigator>
-            <Stack.Screen name="Others" component={OthersScreen} />
+            <Stack.Screen 
+                name="Others" 
+                component={OthersScreen} 
+                options={{
+                    title: "Други", // 👈 това ще е табелката
+                }}
+            />
         </Stack.Navigator>
     );
 }

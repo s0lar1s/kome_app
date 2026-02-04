@@ -23,7 +23,7 @@ export default function RootNavigator() {
                 options={{
                     title: "Home",
                     tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
-                    headerShown: false
+                    headerShown: false,
                 }}
             />
 
@@ -52,7 +52,7 @@ export default function RootNavigator() {
                 component={CodesNavigator}
                 options={{
                     title: "Promo codes",
-                    tabBarIcon: ({ color, size }) => <Ionicons name="card" size={size} color={color} />,
+                    tabBarIcon: ({ color, size }) => <Ionicons name="barcode" size={size} color={color} />,
                     headerShown: false
                 }}
             />
@@ -62,7 +62,7 @@ export default function RootNavigator() {
                 component={OthersNavigator}
                 options={{
                     title: "All others",
-                    tabBarIcon: ({ color, size }) => <Ionicons name="card" size={size} color={color} />,
+                    tabBarIcon: ({ color, size }) => <Ionicons name="apps" size={size} color={color} />,
                     headerShown: false
                 }}
             />

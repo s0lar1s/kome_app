@@ -7,7 +7,13 @@ export default function CodesNavigator() {
 
     return (
         <Stack.Navigator>
-            <Stack.Screen name="Codes" component={CodesScreen} />
+            <Stack.Screen 
+                name="Codes" 
+                component={CodesScreen} 
+                options={{
+                    title: "Промо кодове",
+                }}
+            />
         </Stack.Navigator>
     );
 }

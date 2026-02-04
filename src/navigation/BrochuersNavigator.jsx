@@ -7,7 +7,13 @@ export default function BrochuresNavigator() {
 
     return (
         <Stack.Navigator>
-            <Stack.Screen name="Brochures" component={BrochuresScreen} />
+            <Stack.Screen 
+                name="Brochures" 
+                component={BrochuresScreen} 
+                options={{
+                    title: "Брошури",
+                }}
+            />
         </Stack.Navigator>
     );
 }
