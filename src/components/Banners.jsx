@@ -2,9 +2,14 @@ import { View, StyleSheet, Image, TouchableOpacity, Dimensions } from "react-nat
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-export default function Banners({ id, image, onPress }) {
+export default function Banners({ 
+    id, 
+    image,
+    onPress 
+}) {
+
     return (
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => onPress(id)}>
             <View style={styles.container}>
                 <Image
                     source={{ uri: `https://kome.bg/komeadmin/banners/images/${image}` }}

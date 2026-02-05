@@ -4,3 +4,7 @@
     return api.get('/banners')
   }
   
+export async function getOne(id) {
+  return api.get('/banners', { params: { id } });
+}
+

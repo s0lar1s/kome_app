@@ -1,6 +1,7 @@
 import { RefreshControl, StyleSheet, Text, View, ScrollView, Dimensions } from 'react-native';
 import { useEffect, useState } from 'react';
 import { bannersApi } from '../Api';
+import { useNavigation } from '@react-navigation/native';
 
 import Banners from '../components/Banners.jsx';
 
@@ -13,6 +14,7 @@ export default function HomeScreen() {
   const [banners, setBanners] = useState([]);
   const [toggleRefresh, setToggleRefresh] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const navigation = useNavigation();
 
   useEffect(() => {
     async function fetchData() {
@@ -30,9 +32,14 @@ export default function HomeScreen() {
     fetchData();
   }, [toggleRefresh]);
 
+  const itemPressHandler = (itemId) => {
+    navigation.navigate('BannersDetail', { itemId });
+  };
+
   const refreshHandler = () => {
     setToggleRefresh((state) => !state);
   };
+
 
   return (
     <ScrollView
@@ -53,7 +60,10 @@ export default function HomeScreen() {
         >
           {banners.map((item) => (
             <View key={item.id} style={[styles.bannerCard, { width: CARD_WIDTH }]}>
-              <Banners {...item} />
+              <Banners 
+                {...item} 
+                onPress={itemPressHandler}
+              />
             </View>
           ))}
         </ScrollView>
