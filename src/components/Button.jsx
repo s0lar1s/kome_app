@@ -1,72 +1,122 @@
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
 
-export default function Button({
+const Button = ({
     title,
     onPress,
     variant = 'primary',
+    size = 'medium',
     disabled = false,
+    loading = false,
+    icon,
     style,
-}) {
+}) => {
+    const buttonStyles = [
+        styles.button,
+        styles[variant],
+        styles[size],
+        disabled && styles.disabled,
+        style,
+    ];
+
+    const textStyles = [
+        styles.text,
+        styles[`${variant}Text`],
+        styles[`${size}Text`],
+        disabled && styles.disabledText,
+    ];
+
     return (
         <TouchableOpacity
-            style={[
-                styles.button,
-                variant === 'secondary' && styles.buttonSecondary,
-                variant === 'outline' && styles.buttonOutline,
-                disabled && styles.buttonDisabled,
-                style,
-            ]}
+            style={buttonStyles}
             onPress={onPress}
-            disabled={disabled}
-            activeOpacity={0.7}
+            disabled={disabled || loading}
+            activeOpacity={0.8}
         >
-            <Text
-                style={[
-                    styles.text,
-                    variant === 'secondary' && styles.textSecondary,
-                    variant === 'outline' && styles.textOutline,
-                    disabled && styles.textDisabled,
-                ]}
-            >
-                {title}
-            </Text>
+            {loading ? (
+                <ActivityIndicator
+                    color={variant === 'primary' ? '#fff' : '#6366f1'}
+                    size="small"
+                />
+            ) : (
+                <>
+                    {icon}
+                    <Text style={textStyles}>{title}</Text>
+                </>
+            )}
         </TouchableOpacity>
     );
-}
-
+};
 
 const styles = StyleSheet.create({
     button: {
-        backgroundColor: '#007AFF',
-        paddingVertical: 14,
-        paddingHorizontal: 24,
-        borderRadius: 10,
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        borderRadius: 12,
+        gap: 8,
     },
-    buttonSecondary: {
-        backgroundColor: '#f5f5f5',
+    primary: {
+        backgroundColor: '#6366f1',
     },
-    buttonOutline: {
+    secondary: {
+        backgroundColor: '#e0e7ff',
+    },
+    outline: {
         backgroundColor: 'transparent',
-        borderWidth: 1,
-        borderColor: '#007AFF',
+        borderWidth: 2,
+        borderColor: '#6366f1',
     },
-    buttonDisabled: {
-        backgroundColor: '#ccc',
+    danger: {
+        backgroundColor: '#ef4444',
+    },
+    ghost: {
+        backgroundColor: 'transparent',
+    },
+    small: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+    },
+    medium: {
+        paddingVertical: 14,
+        paddingHorizontal: 24,
+    },
+    large: {
+        paddingVertical: 18,
+        paddingHorizontal: 32,
+    },
+    disabled: {
+        opacity: 0.5,
     },
     text: {
-        color: '#fff',
-        fontSize: 16,
         fontWeight: '600',
     },
-    textSecondary: {
-        color: '#333',
+    primaryText: {
+        color: '#fff',
     },
-    textOutline: {
-        color: '#007AFF',
+    secondaryText: {
+        color: '#6366f1',
     },
-    textDisabled: {
-        color: '#999',
+    outlineText: {
+        color: '#6366f1',
+    },
+    dangerText: {
+        color: '#fff',
+    },
+    ghostText: {
+        color: '#6366f1',
+    },
+    smallText: {
+        fontSize: 14,
+    },
+    mediumText: {
+        fontSize: 16,
+    },
+    largeText: {
+        fontSize: 18,
+    },
+    disabledText: {
+        color: '#94a3b8',
     },
 });
+
+export default Button;
