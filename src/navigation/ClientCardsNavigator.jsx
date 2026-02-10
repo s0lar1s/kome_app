@@ -21,13 +21,6 @@ export default function ClientCardsNavigator() {
                     component={AuthNavigator} 
                  />
             }
-            {/* <Stack.Screen 
-            name="Client - Cards" 
-            component={ClientCardsScreen}
-            options={{
-                title: "Клиентски карти",
-            }}
-            /> */}
         </Stack.Navigator>
     );
 }
