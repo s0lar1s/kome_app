@@ -23,7 +23,7 @@ export default function HomeScreen() {
         const bannersResult = await bannersApi.getAll();
         setBanners(bannersResult.data || []);
       } catch (err) {
-        alert('Cannot load data');
+        alert('Не са заредени данните за банерите.');
       } finally {
         setRefreshing(false);
       }
