@@ -8,11 +8,10 @@ export default function OthersScreen( { navigation }) {
   const handleLogout = () => {
     logout();
     
-    navigation.reset({
+    navigation.getParent()?.reset({
       index: 0,
-      routes: [{ name: "HomePage" }],
+      routes: [{ name: "HomeTab" }],
     });
-
   };
 
   return (

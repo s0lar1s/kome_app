@@ -10,7 +10,7 @@ export default function OthersNavigator() {
                 name="Others" 
                 component={OthersScreen} 
                 options={{
-                    title: "Други", // 👈 това ще е табелката
+                    title: "Други",
                 }}
             />
 
