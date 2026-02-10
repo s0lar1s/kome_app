@@ -15,12 +15,12 @@ export default function HomeNavigator() {
     return (
         <Stack.Navigator>
 
-            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="Home" component={HomeScreen} 
+            options={{
+                    title: "CBA Kome",
+                }}
+            />
             <Stack.Screen name="Brochures" component={BrochuresScreen} />
-            {/* {isAuthenticated
-                ? <Stack.Screen name="ClientCards" component={ClientCardsScreen} />
-                : <Stack.Screen name="Auth" component={AuthNavigator} />
-            } */}
             <Stack.Screen name="ClientCards" component={ClientCardsScreen} />
             <Stack.Screen name="BannersDetail" component={BannersDetailsScreen} />
         </Stack.Navigator>
