@@ -8,6 +8,7 @@ import {
     ScrollView,
     TouchableOpacity,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Input from '../../components/Input';
@@ -46,7 +47,28 @@ const LoginScreen = ({ navigation }) => {
         await login(email, password);
     };
 
-    return (
+//     const handleLogin = async () => {
+//   clearError();
+//   if (!validate()) return;
+
+//   console.log("LOGIN pressed", { email, passwordLen: password.length });
+//   try {
+//     const res = await login(email, password);
+//     console.log("LOGIN result:", res);
+//   } catch (e) {
+//     console.log("LOGIN throw:", e?.response?.data || e?.message || e);
+//   }
+// };
+
+// console.log("AUTH CONTEXT SNAPSHOT:", {
+//   hasLogin: typeof login,
+//   hasClearError: typeof clearError,
+//   isLoading,
+//   error,
+// });
+
+
+    return (        
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -56,13 +78,6 @@ const LoginScreen = ({ navigation }) => {
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
                 >
-                    <View style={styles.header}>
-                        <View style={styles.iconContainer}>
-                            <Ionicons name="location" size={48} color="#6366f1" />
-                        </View>
-                        <Text style={styles.title}>Favourite Places</Text>
-                        <Text style={styles.subtitle}>Sign in to your account</Text>
-                    </View>
 
                     {error && (
                         <View style={styles.errorBanner}>

@@ -14,7 +14,7 @@ import Button from '../../components/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/auth/useAuth.js';
 
-export default function RegisterScreen() {
+export default function RegisterScreen({ navigation }) {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');

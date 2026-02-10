@@ -1,7 +1,6 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import OthersScreen from "../screens/OthersScreen";
 
-
 export default function OthersNavigator() {
     const Stack = createNativeStackNavigator();
 
@@ -14,6 +13,7 @@ export default function OthersNavigator() {
                     title: "Други", // 👈 това ще е табелката
                 }}
             />
+
         </Stack.Navigator>
     );
 }
