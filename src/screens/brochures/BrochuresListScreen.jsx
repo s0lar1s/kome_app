@@ -9,7 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { brochuresApi } from '../Api';
+import { brochuresApi } from '../../Api';
 
 const BROCHURES_BASE = 'https://kome.bg/komeadmin/brochures/images/';
 
@@ -64,13 +64,12 @@ export default function BrochuresListScreen() {
 
     return (
       <Pressable onPress={() => openBrochure(item)} style={styles.brochureCard}>
-        <Image source={{ uri: imgUrl }} style={styles.brochureImage} resizeMode="cover" />
         <View style={styles.brochureFooter}>
           <Text style={styles.brochureTitle} numberOfLines={1}>
             {item.title || 'Брошура'}
           </Text>
-          <Text style={styles.brochureHint}>Отвори PDF</Text>
         </View>
+        <Image source={{ uri: imgUrl }} style={styles.brochureImage} resizeMode="cover" />
       </Pressable>
     );
   };
@@ -84,7 +83,7 @@ export default function BrochuresListScreen() {
         contentContainerStyle={styles.listContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchData} />}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={<Text style={styles.pageTitle}>Активни брошури</Text>}
+        // ListHeaderComponent={<Text style={styles.pageTitle}>Актуални брошури 2</Text>}
         ListEmptyComponent={
           !refreshing ? (
             <View style={styles.emptyWrap}>
@@ -113,6 +112,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#111827',
     marginBottom: 8,
+    textAlign: 'center',
   },
 
   brochureCard: {

@@ -1,7 +1,7 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import HomeScreen from "../screens/HomeScreen";
-import BrochuresScreen from "../screens/BrochuresScreen";
+import BrochuresScreen from "../screens/brochures/BrochuresScreen";
 import ClientCardsScreen from "../screens/ClientCardsScreen";
 import BannersDetailsScreen from "../screens/BannersDetailScreen";
 import AuthNavigator from "./AuthNavigator.jsx";
@@ -20,9 +20,21 @@ export default function HomeNavigator() {
                     title: "CBA Kome",
                 }}
             />
-            <Stack.Screen name="Brochures" component={BrochuresScreen} />
+            <Stack.Screen 
+                name="Brochures" 
+                component={BrochuresScreen} 
+                options={({ route }) => ({
+                    title: route?.params?.title || '',
+                })}
+            />
             <Stack.Screen name="ClientCards" component={ClientCardsScreen} />
-            <Stack.Screen name="BannersDetail" component={BannersDetailsScreen} />
+            <Stack.Screen 
+                name="BannersDetail" 
+                component={BannersDetailsScreen} 
+                options={({ route }) => ({
+                        title: route?.params?.title || '',
+                    })}   
+            />
         </Stack.Navigator>
     );
 }

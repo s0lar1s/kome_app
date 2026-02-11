@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { brochuresApi } from '../Api';
+import { brochuresApi } from '../../Api';
 
 const BROCHURES_BASE = 'https://kome.bg/komeadmin/brochures/images/';
 

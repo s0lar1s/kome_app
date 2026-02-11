@@ -1,6 +1,6 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import BrochuresScreen from "../screens/BrochuresScreen";
-import BrochuresListScreen from "../screens/BrochuresListScreen";
+import BrochuresScreen from "../screens/brochures/BrochuresScreen";
+import BrochuresListScreen from "../screens/brochures/BrochuresListScreen";
 
 
 export default function BrochuresNavigator() {
@@ -20,7 +20,7 @@ export default function BrochuresNavigator() {
                 name="Brochures" 
                 component={BrochuresScreen} 
                 options={{
-                    title: "Брошура",
+                    title: "",
                 }}
             />
         </Stack.Navigator>
