@@ -17,15 +17,15 @@ const LoginScreen = ({ navigation }) => {
     const newErrors = {};
 
     if (!email.trim()) {
-      newErrors.email = 'Email is required';
+      newErrors.email = 'Email е задължителен';
     } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Please enter a valid email';
+      newErrors.email = 'Моля въведете валиден email';
     }
 
     if (!password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = 'Паролата е задължителна';
     } else if (password.length < 4) {
-      newErrors.password = 'Password must be at least 4 characters';
+      newErrors.password = 'Паролата трябва да е повече от 4 символа';
     }
 
     setErrors(newErrors);

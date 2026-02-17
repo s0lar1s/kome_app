@@ -1,38 +1,55 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
+import { useState, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Platform,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  ScrollView,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useHeaderHeight } from '@react-navigation/elements';
+
 import Input from '../../components/Input';
 import Button from '../../components/Button';
 import { useAuth } from '../../contexts/auth/useAuth.js';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 export default function RegisterScreen({ navigation }) {
+  const headerHeight = useHeaderHeight();
+
+  const nameRef = useRef(null);
+  const emailRef = useRef(null);
+  const passRef = useRef(null);
+  const confirmRef = useRef(null);
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState({});
+
   const { register, isLoading, error, clearError } = useAuth();
 
   const validate = () => {
     const newErrors = {};
 
-    if (!name.trim()) newErrors.name = 'Name is required';
+    if (!name.trim()) newErrors.name = 'Името е задължително';
 
     if (!email.trim()) {
-      newErrors.email = 'Email is required';
+      newErrors.email = 'Email е задължителен';
     } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Please enter a valid email';
+      newErrors.email = 'Моля въведете валиден email';
     }
 
     if (!password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = 'Паролата е задължителна';
     } else if (password.length < 4) {
-      newErrors.password = 'Password must be at least 4 characters';
+      newErrors.password = 'Паролата трябва да е повече от 4 символа';
     }
 
     if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = 'Паролите не съвпадат';
     }
 
     setErrors(newErrors);
@@ -46,100 +63,116 @@ export default function RegisterScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAwareScrollView
+    <KeyboardAvoidingView
       style={styles.root}
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-      enableOnAndroid
-      enableAutomaticScroll
-      enableResetScrollToCoords={false}
-      extraScrollHeight={12}
-      extraHeight={Platform.OS === 'ios' ? 20 : 120}
-      keyboardOpeningTime={0}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
     >
-      <View style={styles.header}>
-        <View style={styles.iconContainer}>
-          <Ionicons name="person-add" size={48} color="#F50000" />
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'on-drag' : 'none'}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <View style={styles.iconContainer}>
+            <Ionicons name="person-add" size={48} color="#F50000" />
+          </View>
+          <Text style={styles.title}>Регистрация</Text>
         </View>
-        <Text style={styles.title}>Регистрация</Text>
-      </View>
 
-      {error && (
-        <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle" size={20} color="#ef4444" />
-          <Text style={styles.errorBannerText}>{error}</Text>
+        {error && (
+          <View style={styles.errorBanner}>
+            <Ionicons name="alert-circle" size={20} color="#ef4444" />
+            <Text style={styles.errorBannerText}>{error}</Text>
+          </View>
+        )}
+
+        <View style={styles.form}>
+          <Input
+            ref={nameRef}
+            label="Име"
+            value={name}
+            onChangeText={(text) => {
+              setName(text);
+              if (errors.name) setErrors((prev) => ({ ...prev, name: null }));
+            }}
+            placeholder="Въведете име"
+            autoCapitalize="words"
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => emailRef.current?.focus?.()}
+            error={errors.name}
+          />
+
+          <Input
+            ref={emailRef}
+            label="Email"
+            value={email}
+            onChangeText={(text) => {
+              setEmail(text);
+              if (errors.email) setErrors((prev) => ({ ...prev, email: null }));
+            }}
+            placeholder="Въведете email"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => passRef.current?.focus?.()}
+            error={errors.email}
+          />
+
+          <Input
+            ref={passRef}
+            label="Парола"
+            value={password}
+            onChangeText={(text) => {
+              setPassword(text);
+              if (errors.password) setErrors((prev) => ({ ...prev, password: null }));
+            }}
+            placeholder="Въведете парола"
+            secureTextEntry
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => confirmRef.current?.focus?.()}
+            error={errors.password}
+          />
+
+          <Input
+            ref={confirmRef}
+            label="Потвърди паролата"
+            value={confirmPassword}
+            onChangeText={(text) => {
+              setConfirmPassword(text);
+              if (errors.confirmPassword)
+                setErrors((prev) => ({ ...prev, confirmPassword: null }));
+            }}
+            placeholder="Потвърдете паролата"
+            secureTextEntry
+            returnKeyType="done"
+            onSubmitEditing={handleRegister}
+            error={errors.confirmPassword}
+          />
+
+          <Button
+            title="Създай акаунт"
+            onPress={handleRegister}
+            loading={isLoading}
+            disabled={isLoading}
+            style={styles.registerButton}
+          />
         </View>
-      )}
 
-      <View style={styles.form}>
-        <Input
-          label="Име"
-          value={name}
-          onChangeText={(text) => {
-            setName(text);
-            if (errors.name) setErrors({ ...errors, name: null });
-          }}
-          placeholder="Въведете име"
-          autoCapitalize="words"
-          error={errors.name}
-        />
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Вече имате регистрация?</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Login')} activeOpacity={0.85}>
+            <Text style={styles.linkText}>Вход</Text>
+          </TouchableOpacity>
+        </View>
 
-        <Input
-          label="Email"
-          value={email}
-          onChangeText={(text) => {
-            setEmail(text);
-            if (errors.email) setErrors({ ...errors, email: null });
-          }}
-          placeholder="Въведете email"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          error={errors.email}
-        />
-
-        <Input
-          label="Парола"
-          value={password}
-          onChangeText={(text) => {
-            setPassword(text);
-            if (errors.password) setErrors({ ...errors, password: null });
-          }}
-          placeholder="Въведете парола"
-          secureTextEntry
-          error={errors.password}
-        />
-
-        <Input
-          label="Потвърди паролата"
-          value={confirmPassword}
-          onChangeText={(text) => {
-            setConfirmPassword(text);
-            if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: null });
-          }}
-          placeholder="Потвърдете паролата"
-          secureTextEntry
-          error={errors.confirmPassword}
-        />
-
-        <Button
-          title="Създай акаунт"
-          onPress={handleRegister}
-          loading={isLoading}
-          disabled={isLoading}
-          style={styles.registerButton}
-        />
-      </View>
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Вече имате регистрация?</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Login')} activeOpacity={0.85}>
-          <Text style={styles.linkText}>Вход</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.bottomSpacer} />
-    </KeyboardAwareScrollView>
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -152,7 +185,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 28,
-    paddingBottom: Platform.OS === 'ios' ? 140 : 60,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
   header: {
     alignItems: 'center',

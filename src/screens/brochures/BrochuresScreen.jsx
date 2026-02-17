@@ -129,6 +129,9 @@ export default function BrochuresScreen({ route }) {
           </TouchableOpacity>
         </View>
       )}
+      <View style={styles.footer}>
+        <Text style={styles.title}>{brochure?.title || 'Седмична брошура'}</Text>
+      </View>
     </View>
   );
 }
@@ -137,6 +140,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
 
   header: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef2f7',
+    backgroundColor: '#fff',
+  },
+
+  footer: {
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 10,
