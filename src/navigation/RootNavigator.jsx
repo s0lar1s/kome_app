@@ -13,6 +13,7 @@ export default function RootNavigator() {
     const Tabs = createBottomTabNavigator();
 
     return (
+        
         <Tabs.Navigator
             screenOptions={{
             }}

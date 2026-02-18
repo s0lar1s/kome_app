@@ -2,21 +2,29 @@ import React from "react";
 import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
 import { useAuth } from "../contexts/auth/useAuth.js";
 
-export default function OthersScreen( { navigation }) {
+export default function OthersScreen({ navigation }) {
   const { logout } = useAuth();
 
   const handleLogout = () => {
     logout();
-    
+
     navigation.getParent()?.reset({
       index: 0,
       routes: [{ name: "HomeTab" }],
     });
   };
 
+  const goToShops = () => {
+    navigation.navigate("ShopsList");
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>All others</Text>
+
+      <TouchableOpacity style={styles.primaryBtn} onPress={goToShops}>
+        <Text style={styles.primaryText}>Обекти / Магазини</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
         <Text style={styles.logoutText}>Logout</Text>
@@ -32,11 +40,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
+    gap: 12,
   },
   title: {
     fontSize: 18,
-    marginBottom: 16,
+    marginBottom: 8,
   },
+
+  primaryBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#6366f1",
+  },
+  primaryText: {
+    color: "#6366f1",
+    fontWeight: "700",
+  },
+
   logoutBtn: {
     paddingVertical: 12,
     paddingHorizontal: 18,
