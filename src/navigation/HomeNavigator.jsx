@@ -27,8 +27,10 @@ export default function HomeNavigator() {
                     title: route?.params?.title || '',
                 })}
             />
+
             <Stack.Screen name="ClientCards" component={ClientCardsScreen} />
-            <Stack.Screen 
+
+            <Stack.Screen
                 name="BannersDetail" 
                 component={BannersDetailsScreen} 
                 options={({ route }) => ({
