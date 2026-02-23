@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -13,14 +13,17 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { shoppingListApi } from '../Api'; // ако трябва: '../../Api'
-import { useAuth } from '../contexts/auth/useAuth.js'; // ако трябва: '../../contexts/auth/useAuth.js'
+import { shoppingListApi } from '../Api';
+import { useAuth } from '../contexts/auth/useAuth.js';
 
 function norm(v) {
   return String(v ?? '').trim();
 }
 
 const LS_KEY = 'shopping_list_local_v1';
+
+// ⬇️ СМЕНИ АКО ПРИ ТЕБ Е ДРУГО
+const ACCESS_TOKEN_KEY = 'accessToken';
 
 function isUnauthorized(err) {
   const s = err?.response?.status;
@@ -45,14 +48,20 @@ async function writeLocalList(list) {
   }
 }
 
-// локални “id-та” (за да имаме keyExtractor)
 function makeLocalId() {
   return `local_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 }
 
 export default function ShoppingListScreen({ navigation }) {
-  const { logout, accessToken, user } = useAuth?.() ?? {};
-  // accessToken/user може да ги нямаш — не е проблем. Ползваме 401 fallback.
+  const auth = useAuth?.() ?? {};
+  const accessTokenFromContext = auth?.accessToken;
+  const user = auth?.user;
+
+  // fallback token ако контекстът не го дава
+  const [tokenFallback, setTokenFallback] = useState(null);
+
+  // реалният токен, който ще използваме
+  const token = accessTokenFromContext || tokenFallback;
 
   const [items, setItems] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -64,8 +73,20 @@ export default function ShoppingListScreen({ navigation }) {
   const [editItem, setEditItem] = useState(null);
   const [editTitle, setEditTitle] = useState('');
 
-  // ако сме в local режим
   const [useLocal, setUseLocal] = useState(false);
+
+  // за да не правим двойни load-и при първо отваряне
+  const didInit = useRef(false);
+
+  // взимаме токена от AsyncStorage (fallback)
+  const loadTokenFallback = async () => {
+    try {
+      const t = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+      setTokenFallback(t || null);
+    } catch {
+      setTokenFallback(null);
+    }
+  };
 
   const sortedItems = useMemo(() => {
     const arr = Array.isArray(items) ? [...items] : [];
@@ -78,7 +99,6 @@ export default function ShoppingListScreen({ navigation }) {
       const bso = Number(b?.sort_order) || 0;
       if (aso !== bso) return aso - bso;
 
-      // server id е число, local id е string -> за сортиране ползваме created_at / fallback
       const at = Number(a?.created_at_ts) || 0;
       const bt = Number(b?.created_at_ts) || 0;
       if (at !== bt) return bt - at;
@@ -90,49 +110,6 @@ export default function ShoppingListScreen({ navigation }) {
     return arr;
   }, [items]);
 
-  const load = async () => {
-    setRefreshing(true);
-
-    // ако сме решили локално (или нямаме токен)
-    if (useLocal || !accessToken) {
-      const local = await readLocalList();
-      setItems(local);
-      setUseLocal(true);
-      setRefreshing(false);
-      return;
-    }
-
-    try {
-      const res = await shoppingListApi.getAll();
-      setItems(Array.isArray(res?.data) ? res.data : []);
-      setUseLocal(false);
-    } catch (e) {
-      if (isUnauthorized(e)) {
-        // 1) fallback към локално + опционално пращаме към login
-        const local = await readLocalList();
-        setItems(local);
-        setUseLocal(true);
-
-        // ако искаш директно да праща към login, разкоментирай:
-        // logout?.();
-        // navigation?.navigate?.('Login');
-
-        return;
-      }
-
-      Alert.alert('Грешка', 'Проблем със зареждането на списъка.');
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  // при отваряне и когато се сменя login state (ако го имаш)
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, user?.id]);
-
-  // helper: когато пипаме items в local режим, да ги запишем
   const setItemsAndPersistLocal = (updater) => {
     setItems((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -140,6 +117,64 @@ export default function ShoppingListScreen({ navigation }) {
       return next;
     });
   };
+
+  const load = async () => {
+    setRefreshing(true);
+
+    // ✅ ако имаме токен -> ВИНАГИ пробваме API (дори useLocal да е true)
+    if (token) {
+      try {
+        const res = await shoppingListApi.getAll();
+        setItems(Array.isArray(res?.data) ? res.data : []);
+        setUseLocal(false);
+        return;
+      } catch (e) {
+        if (isUnauthorized(e)) {
+          // токенът е невалиден или няма права -> local fallback
+          const local = await readLocalList();
+          setItems(local);
+          setUseLocal(true);
+          return;
+        }
+
+        Alert.alert('Грешка', 'Проблем със зареждането на списъка.');
+        return;
+      } finally {
+        setRefreshing(false);
+      }
+    }
+
+    // няма токен -> local
+    const local = await readLocalList();
+    setItems(local);
+    setUseLocal(true);
+    setRefreshing(false);
+  };
+
+  // init: вземи fallback token и зареди
+  useEffect(() => {
+    (async () => {
+      if (didInit.current) return;
+      didInit.current = true;
+
+      await loadTokenFallback();
+      await load();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // когато се смени контекстния токен/потребител -> зареждаме пак
+  useEffect(() => {
+    // ако контекстът вече дава токен, не ни трябва fallback
+    if (accessTokenFromContext) setTokenFallback(null);
+
+    // при логин/смяна на user -> опитай API
+    (async () => {
+      await loadTokenFallback(); // в случай че контекстът не го дава
+      await load();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessTokenFromContext, user?.id]);
 
   const onAdd = async () => {
     const title = norm(newTitle);
@@ -149,7 +184,7 @@ export default function ShoppingListScreen({ navigation }) {
     setAdding(true);
 
     // LOCAL MODE
-    if (useLocal || !accessToken) {
+    if (!token) {
       const created = {
         id: makeLocalId(),
         title,
@@ -170,6 +205,7 @@ export default function ShoppingListScreen({ navigation }) {
 
       if (created?.id) {
         setItems((prev) => [created, ...(Array.isArray(prev) ? prev : [])]);
+        setUseLocal(false);
       } else {
         await load();
       }
@@ -177,7 +213,7 @@ export default function ShoppingListScreen({ navigation }) {
       setNewTitle('');
     } catch (e) {
       if (isUnauthorized(e)) {
-        // fallback to local
+        // fallback local
         const created = {
           id: makeLocalId(),
           title,
@@ -203,8 +239,8 @@ export default function ShoppingListScreen({ navigation }) {
 
     const nextDone = Number(item?.is_done) ? 0 : 1;
 
-    // optimistic UI
-    if (useLocal || !accessToken) {
+    // LOCAL
+    if (!token) {
       setItemsAndPersistLocal((prev) =>
         (Array.isArray(prev) ? prev : []).map((x) =>
           x?.id === id ? { ...x, is_done: nextDone } : x
@@ -213,6 +249,7 @@ export default function ShoppingListScreen({ navigation }) {
       return;
     }
 
+    // optimistic UI
     setItems((prev) =>
       (Array.isArray(prev) ? prev : []).map((x) =>
         x?.id === id ? { ...x, is_done: nextDone } : x
@@ -221,9 +258,9 @@ export default function ShoppingListScreen({ navigation }) {
 
     try {
       await shoppingListApi.toggleDone({ id, is_done: nextDone });
+      setUseLocal(false);
     } catch (e) {
       if (isUnauthorized(e)) {
-        // fallback: оставяме локално състояние (или можем rollback, но по-приятно е да минем на local)
         setUseLocal(true);
         await writeLocalList(items);
         return;
@@ -250,7 +287,8 @@ export default function ShoppingListScreen({ navigation }) {
     const id = item?.id;
     if (!id) return;
 
-    if (useLocal || !accessToken) {
+    // LOCAL
+    if (!token) {
       setItemsAndPersistLocal((prev) =>
         Array.isArray(prev) ? prev.filter((x) => x?.id !== id) : prev
       );
@@ -258,12 +296,11 @@ export default function ShoppingListScreen({ navigation }) {
     }
 
     const snapshot = items;
-    setItems((prev) =>
-      Array.isArray(prev) ? prev.filter((x) => x?.id !== id) : prev
-    );
+    setItems((prev) => (Array.isArray(prev) ? prev.filter((x) => x?.id !== id) : prev));
 
     try {
       await shoppingListApi.remove(id);
+      setUseLocal(false);
     } catch (e) {
       if (isUnauthorized(e)) {
         setUseLocal(true);
@@ -292,7 +329,8 @@ export default function ShoppingListScreen({ navigation }) {
 
     const id = editItem.id;
 
-    if (useLocal || !accessToken) {
+    // LOCAL
+    if (!token) {
       setItemsAndPersistLocal((p) =>
         (Array.isArray(p) ? p : []).map((x) => (x?.id === id ? { ...x, title } : x))
       );
@@ -304,7 +342,6 @@ export default function ShoppingListScreen({ navigation }) {
 
     const prev = items;
 
-    // optimistic update
     setItems((p) =>
       (Array.isArray(p) ? p : []).map((x) => (x?.id === id ? { ...x, title } : x))
     );
@@ -313,6 +350,7 @@ export default function ShoppingListScreen({ navigation }) {
 
     try {
       await shoppingListApi.update({ id, title });
+      setUseLocal(false);
     } catch (e) {
       if (isUnauthorized(e)) {
         setUseLocal(true);
@@ -358,6 +396,8 @@ export default function ShoppingListScreen({ navigation }) {
     );
   };
 
+  const showLocal = useLocal || !token;
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -384,10 +424,10 @@ export default function ShoppingListScreen({ navigation }) {
 
         <Text style={styles.hint}>
           ✓: отметни • ✎: редакция • ✕: изтрий
-          {useLocal ? ' • Локален режим' : ''}
+          {showLocal ? ' • Локален режим' : ''}
         </Text>
 
-        {useLocal ? (
+        {showLocal ? (
           <View style={styles.localBanner}>
             <Text style={styles.localBannerText}>
               В момента списъкът се пази локално (без логин). При логин ще се използва базата.

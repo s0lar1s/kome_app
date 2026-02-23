@@ -42,3 +42,4 @@ yarn-error.*
 /ios
 /android
 
+src/contexts/auth/AuthProvider copy 2.jsx

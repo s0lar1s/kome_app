@@ -8,6 +8,7 @@ export const AuthContext = createContext({
   error: null,
   user: null,
   auth: null,
+  accessToken: null, // ✅ добавено
   login: async (email, password) => {},
   register: async (email, password, name) => {},
   clearError: () => {},
@@ -15,12 +16,7 @@ export const AuthContext = createContext({
 });
 
 function getErrMsg(err) {
-  // Axios: err.response.data.error е твоят PHP json error
-  return (
-    err?.response?.data?.error ||
-    err?.message ||
-    "An error occurred"
-  );
+  return err?.response?.data?.error || err?.message || "An error occurred";
 }
 
 export function AuthProvider({ children }) {
@@ -78,20 +74,22 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const logout = () => {
+    setAuth({ accessToken: null, user: null });
+  };
+
   const contextValue = {
-    isAuthenticated: !!auth.user,
+    isAuthenticated: !!auth?.user,
     isLoading,
     error,
-    user: auth.user,
+    user: auth?.user ?? null,
     auth,
+    accessToken: auth?.accessToken ?? null, // ✅ добавено (ключовото)
     clearError: () => setError(null),
     login,
     register,
-    logout: () => {
-      setAuth({ accessToken: null, user: null });
-    },
+    logout,
   };
-
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 }
