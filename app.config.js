@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import "dotenv/config";
 
 export default {
   expo: {
@@ -12,30 +12,41 @@ export default {
     splash: {
       image: "./assets/splash-icon.png",
       resizeMode: "contain",
-      backgroundColor: "#ffffff"
+      backgroundColor: "#ffffff",
     },
+
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.anonymous.kome-app",
+      infoPlist: {
+        NSCameraUsageDescription:
+          "Нужна е камера, за да сканираш баркода на клиентската карта.",
+      },
       config: {
-        googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY
-      }
+        googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
+      },
     },
+
     android: {
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
-        backgroundColor: "#ffffff"
+        backgroundColor: "#ffffff",
       },
       edgeToEdgeEnabled: true,
       package: "com.anonymous.kome_app",
+
+      // важно за камерата:
+      permissions: ["CAMERA"],
+
       config: {
         googleMaps: {
-          apiKey: process.env.GOOGLE_MAPS_API_KEY
-        }
-      }
+          apiKey: process.env.GOOGLE_MAPS_API_KEY,
+        },
+      },
     },
+
     web: {
-      favicon: "./assets/favicon.png"
-    }
-  }
+      favicon: "./assets/favicon.png",
+    },
+  },
 };
