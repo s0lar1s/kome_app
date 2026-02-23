@@ -11,13 +11,49 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { shoppingListApi } from '../Api'; // ако трябва: '../../Api'
+import { useAuth } from '../contexts/auth/useAuth.js'; // ако трябва: '../../contexts/auth/useAuth.js'
 
 function norm(v) {
   return String(v ?? '').trim();
 }
 
-export default function ShoppingListScreen() {
+const LS_KEY = 'shopping_list_local_v1';
+
+function isUnauthorized(err) {
+  const s = err?.response?.status;
+  return s === 401 || s === 403;
+}
+
+async function readLocalList() {
+  try {
+    const raw = await AsyncStorage.getItem(LS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeLocalList(list) {
+  try {
+    await AsyncStorage.setItem(LS_KEY, JSON.stringify(Array.isArray(list) ? list : []));
+  } catch {
+    // ignore
+  }
+}
+
+// локални “id-та” (за да имаме keyExtractor)
+function makeLocalId() {
+  return `local_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+}
+
+export default function ShoppingListScreen({ navigation }) {
+  const { logout, accessToken, user } = useAuth?.() ?? {};
+  // accessToken/user може да ги нямаш — не е проблем. Ползваме 401 fallback.
+
   const [items, setItems] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -27,6 +63,9 @@ export default function ShoppingListScreen() {
   const [editOpen, setEditOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [editTitle, setEditTitle] = useState('');
+
+  // ако сме в local режим
+  const [useLocal, setUseLocal] = useState(false);
 
   const sortedItems = useMemo(() => {
     const arr = Array.isArray(items) ? [...items] : [];
@@ -39,6 +78,11 @@ export default function ShoppingListScreen() {
       const bso = Number(b?.sort_order) || 0;
       if (aso !== bso) return aso - bso;
 
+      // server id е число, local id е string -> за сортиране ползваме created_at / fallback
+      const at = Number(a?.created_at_ts) || 0;
+      const bt = Number(b?.created_at_ts) || 0;
+      if (at !== bt) return bt - at;
+
       const aid = Number(a?.id) || 0;
       const bid = Number(b?.id) || 0;
       return bid - aid;
@@ -48,19 +92,54 @@ export default function ShoppingListScreen() {
 
   const load = async () => {
     setRefreshing(true);
+
+    // ако сме решили локално (или нямаме токен)
+    if (useLocal || !accessToken) {
+      const local = await readLocalList();
+      setItems(local);
+      setUseLocal(true);
+      setRefreshing(false);
+      return;
+    }
+
     try {
       const res = await shoppingListApi.getAll();
       setItems(Array.isArray(res?.data) ? res.data : []);
+      setUseLocal(false);
     } catch (e) {
+      if (isUnauthorized(e)) {
+        // 1) fallback към локално + опционално пращаме към login
+        const local = await readLocalList();
+        setItems(local);
+        setUseLocal(true);
+
+        // ако искаш директно да праща към login, разкоментирай:
+        // logout?.();
+        // navigation?.navigate?.('Login');
+
+        return;
+      }
+
       Alert.alert('Грешка', 'Проблем със зареждането на списъка.');
     } finally {
       setRefreshing(false);
     }
   };
 
+  // при отваряне и когато се сменя login state (ако го имаш)
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, user?.id]);
+
+  // helper: когато пипаме items в local режим, да ги запишем
+  const setItemsAndPersistLocal = (updater) => {
+    setItems((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      writeLocalList(next);
+      return next;
+    });
+  };
 
   const onAdd = async () => {
     const title = norm(newTitle);
@@ -68,6 +147,23 @@ export default function ShoppingListScreen() {
 
     Keyboard.dismiss();
     setAdding(true);
+
+    // LOCAL MODE
+    if (useLocal || !accessToken) {
+      const created = {
+        id: makeLocalId(),
+        title,
+        is_done: 0,
+        sort_order: 0,
+        created_at_ts: Date.now(),
+      };
+      setItemsAndPersistLocal((prev) => [created, ...(Array.isArray(prev) ? prev : [])]);
+      setNewTitle('');
+      setAdding(false);
+      return;
+    }
+
+    // API MODE
     try {
       const res = await shoppingListApi.create({ title });
       const created = res?.data;
@@ -80,9 +176,21 @@ export default function ShoppingListScreen() {
 
       setNewTitle('');
     } catch (e) {
-      console.log('ADD error status:', e?.response?.status);
-      console.log('ADD error data:', e?.response?.data);
-      console.log('ADD error message:', e?.message);
+      if (isUnauthorized(e)) {
+        // fallback to local
+        const created = {
+          id: makeLocalId(),
+          title,
+          is_done: 0,
+          sort_order: 0,
+          created_at_ts: Date.now(),
+        };
+        setUseLocal(true);
+        setItemsAndPersistLocal((prev) => [created, ...(Array.isArray(prev) ? prev : [])]);
+        setNewTitle('');
+        return;
+      }
+
       Alert.alert('Грешка', 'Не успях да добавя запис.');
     } finally {
       setAdding(false);
@@ -96,6 +204,15 @@ export default function ShoppingListScreen() {
     const nextDone = Number(item?.is_done) ? 0 : 1;
 
     // optimistic UI
+    if (useLocal || !accessToken) {
+      setItemsAndPersistLocal((prev) =>
+        (Array.isArray(prev) ? prev : []).map((x) =>
+          x?.id === id ? { ...x, is_done: nextDone } : x
+        )
+      );
+      return;
+    }
+
     setItems((prev) =>
       (Array.isArray(prev) ? prev : []).map((x) =>
         x?.id === id ? { ...x, is_done: nextDone } : x
@@ -105,6 +222,13 @@ export default function ShoppingListScreen() {
     try {
       await shoppingListApi.toggleDone({ id, is_done: nextDone });
     } catch (e) {
+      if (isUnauthorized(e)) {
+        // fallback: оставяме локално състояние (или можем rollback, но по-приятно е да минем на local)
+        setUseLocal(true);
+        await writeLocalList(items);
+        return;
+      }
+
       // rollback
       setItems((prev) =>
         (Array.isArray(prev) ? prev : []).map((x) =>
@@ -126,6 +250,13 @@ export default function ShoppingListScreen() {
     const id = item?.id;
     if (!id) return;
 
+    if (useLocal || !accessToken) {
+      setItemsAndPersistLocal((prev) =>
+        Array.isArray(prev) ? prev.filter((x) => x?.id !== id) : prev
+      );
+      return;
+    }
+
     const snapshot = items;
     setItems((prev) =>
       Array.isArray(prev) ? prev.filter((x) => x?.id !== id) : prev
@@ -134,6 +265,11 @@ export default function ShoppingListScreen() {
     try {
       await shoppingListApi.remove(id);
     } catch (e) {
+      if (isUnauthorized(e)) {
+        setUseLocal(true);
+        await writeLocalList(snapshot);
+        return;
+      }
       setItems(snapshot);
       Alert.alert('Грешка', 'Не успях да изтрия запис.');
     }
@@ -155,13 +291,22 @@ export default function ShoppingListScreen() {
     }
 
     const id = editItem.id;
+
+    if (useLocal || !accessToken) {
+      setItemsAndPersistLocal((p) =>
+        (Array.isArray(p) ? p : []).map((x) => (x?.id === id ? { ...x, title } : x))
+      );
+      setEditOpen(false);
+      setEditItem(null);
+      setEditTitle('');
+      return;
+    }
+
     const prev = items;
 
     // optimistic update
     setItems((p) =>
-      (Array.isArray(p) ? p : []).map((x) =>
-        x?.id === id ? { ...x, title } : x
-      )
+      (Array.isArray(p) ? p : []).map((x) => (x?.id === id ? { ...x, title } : x))
     );
 
     setEditOpen(false);
@@ -169,6 +314,11 @@ export default function ShoppingListScreen() {
     try {
       await shoppingListApi.update({ id, title });
     } catch (e) {
+      if (isUnauthorized(e)) {
+        setUseLocal(true);
+        await writeLocalList(prev);
+        return;
+      }
       setItems(prev);
       Alert.alert('Грешка', 'Не успях да запиша промяната.');
     } finally {
@@ -189,14 +339,12 @@ export default function ShoppingListScreen() {
           </View>
         </Pressable>
 
-        {/* Само текст – НЕ е edit */}
         <View style={styles.rowBody}>
           <Text style={[styles.rowTitle, done && styles.rowTitleDone]} numberOfLines={2}>
             {title}
           </Text>
         </View>
 
-        {/* Actions */}
         <View style={styles.actions}>
           <Pressable onPress={() => openEdit(item)} style={styles.editBtn} hitSlop={10}>
             <Text style={styles.editText}>✎</Text>
@@ -234,7 +382,18 @@ export default function ShoppingListScreen() {
           </Pressable>
         </View>
 
-        <Text style={styles.hint}>✓: отметни • ✎: редакция • ✕: изтрий</Text>
+        <Text style={styles.hint}>
+          ✓: отметни • ✎: редакция • ✕: изтрий
+          {useLocal ? ' • Локален режим' : ''}
+        </Text>
+
+        {useLocal ? (
+          <View style={styles.localBanner}>
+            <Text style={styles.localBannerText}>
+              В момента списъкът се пази локално (без логин). При логин ще се използва базата.
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <FlatList
@@ -253,7 +412,6 @@ export default function ShoppingListScreen() {
         }
       />
 
-      {/* EDIT MODAL */}
       <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setEditOpen(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
@@ -328,6 +486,19 @@ const styles = StyleSheet.create({
 
   hint: { fontSize: 12, color: '#64748b', fontWeight: '700' },
 
+  localBanner: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 14,
+    padding: 10,
+  },
+  localBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+
   listContent: { paddingHorizontal: 16, paddingBottom: 24, gap: 10 },
 
   row: {
@@ -361,11 +532,7 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 14, color: '#111827', fontWeight: '800' },
   rowTitleDone: { textDecorationLine: 'line-through', color: '#64748b' },
 
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
   editBtn: {
     width: 36,
