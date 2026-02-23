@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   StyleSheet,
@@ -10,11 +9,12 @@ import {
   View,
   Linking,
   Platform,
+  Alert,
   StatusBar as RNStatusBar,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Barcode } from "expo-barcode-generator";
-import { SafeAreaView } from "react-native-safe-area-context"; // ✅ FIX
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/auth/useAuth.js";
 import { clientCardsApi } from "../Api/index.js";
 
@@ -30,22 +30,39 @@ function normalizeCcnum(raw) {
 
 export default function ClientCardsScreen() {
   const { isAuthenticated } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(false);
   const [card, setCard] = useState(null);
 
   const [scanOpen, setScanOpen] = useState(false);
+  const [scanEnabled, setScanEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [manualOpen, setManualOpen] = useState(false);
   const [manualValue, setManualValue] = useState("");
 
   const [permission, requestPermission] = useCameraPermissions();
+  const [showFullNumber, setShowFullNumber] = useState(false);
 
-  // ✅ hard lock срещу многократно сканиране/многократни Alert-и
-  const scanLockRef = useRef(false);
+  const [flash, setFlash] = useState(null);
+  const flashTimerRef = useRef(null);
+  const fullTimerRef = useRef(null);
 
-  const canScan = useMemo(() => scanOpen && !saving && !scanLockRef.current, [scanOpen, saving]);
+  const showFlash = (type, text, ms = 1800) => {
+    setFlash({ type, text });
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = setTimeout(() => setFlash(null), ms);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      if (fullTimerRef.current) clearTimeout(fullTimerRef.current);
+    };
+  }, []);
+
+  const canScan = useMemo(() => scanOpen && scanEnabled && !saving, [scanOpen, scanEnabled, saving]);
 
   const load = async () => {
     if (!isAuthenticated) return;
@@ -54,7 +71,7 @@ export default function ClientCardsScreen() {
       const res = await clientCardsApi.getMine();
       setCard(res?.data?.card ?? null);
     } catch {
-      Alert.alert("Грешка", "Не успях да заредя клиентската карта.");
+      showFlash("err", "Проблем със зареждането на картата.");
     } finally {
       setLoading(false);
     }
@@ -65,43 +82,45 @@ export default function ClientCardsScreen() {
   }, [isAuthenticated]);
 
   const openScanner = async () => {
-    // reset lock при всяко отваряне
-    scanLockRef.current = false;
-
     if (!permission?.granted) {
       const r = await requestPermission();
       if (!r.granted) {
-        Alert.alert("Камера", "Нужен е достъп до камерата.", [
-          { text: "Отказ", style: "cancel" },
-          { text: "Настройки", onPress: () => Linking.openSettings() },
-        ]);
+        showFlash("err", "Нужен е достъп до камерата (Настройки).", 2500);
+        Linking.openSettings?.();
         return;
       }
     }
-
+    setScanEnabled(true);
     setScanOpen(true);
   };
 
-  const saveCard = async (ccnum, { silentSuccess = false } = {}) => {
+  const closeScanner = () => {
+    setScanEnabled(false);
+    setScanOpen(false);
+  };
+
+  const saveCard = async (ccnum) => {
     setSaving(true);
     try {
       const res = await clientCardsApi.setCard({ ccnum });
       setCard(res?.data?.card ?? null);
 
-      // затваряме модалите
-      setScanOpen(false);
+      closeScanner();
       setManualOpen(false);
       setManualValue("");
 
-      if (!silentSuccess) {
-        //Alert.alert("Готово", "Картата е записана.");
-      }
+      if (fullTimerRef.current) clearTimeout(fullTimerRef.current);
+      setShowFullNumber(true);
+      showFlash("ok", "Картата е добавена. Проверете номера.", 8000);
+
+      fullTimerRef.current = setTimeout(() => {
+        setShowFullNumber(false);
+      }, 5000);
     } catch (e) {
-      const msg =
-        e?.response?.data?.error || e?.message || "Неуспешно записване.";
-      Alert.alert("Грешка", msg);
-      // ако е грешка, разрешаваме нов опит за сканиране
-      scanLockRef.current = false;
+      const msg = e?.response?.data?.error || e?.message || "Неуспешно записване.";
+      showFlash("err", msg, 3000);
+
+      if (scanOpen) setScanEnabled(true);
     } finally {
       setSaving(false);
     }
@@ -113,48 +132,55 @@ export default function ClientCardsScreen() {
     const ccnum = normalizeCcnum(data);
     if (!ccnum || ccnum.length < 6) return;
 
-    // ✅ заключваме веднага, за да не се вика 20 пъти
-    scanLockRef.current = true;
-
-    // ✅ затваряме камерата веднага (спира flood-а от сканирания)
+    setScanEnabled(false);
     setScanOpen(false);
 
-    // ✅ запис + показваме 1 Alert
     await saveCard(ccnum);
   };
 
-  const remove = async () => {
-    Alert.alert("Премахване", "Да премахна ли картата?", [
-      { text: "Не", style: "cancel" },
-      {
-        text: "Да",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await clientCardsApi.removeCard();
-            setCard(null);
-          } catch {
-            Alert.alert("Грешка", "Не успях да премахна картата.");
-          }
+  const remove = () => {
+    Alert.alert(
+      "Премахване на карта",
+      "Сигурни ли сте, че искате да премахнете тази клиентска карта?",
+      [
+        { text: "Отказ", style: "cancel" },
+        {
+          text: "Премахни",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await clientCardsApi.removeCard();
+              setCard(null);
+              showFlash("ok", "Картата беше премахната.");
+            } catch {
+              showFlash("err", "Не успях да премахна картата.", 2500);
+            }
+          },
         },
-      },
-    ]);
+      ],
+      { cancelable: true }
+    );
   };
 
-  if (!isAuthenticated) {
-    return (
-      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <Text style={styles.title}>Клиентска карта</Text>
-        <Text style={styles.sub}>Моля, влез в профила си.</Text>
-      </SafeAreaView>
-    );
-  }
+  const modalContainerStyle = {
+    flex: 1,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingTop: (insets?.top ?? 0) + 12,
+    paddingBottom: (insets?.bottom ?? 0) + 12,
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <RNStatusBar barStyle="dark-content" />
 
       <Text style={styles.title}>Клиентска карта</Text>
+
+      {flash && (
+        <View style={[styles.flash, flash.type === "ok" ? styles.flashOk : styles.flashErr]}>
+          <Text style={styles.flashText}>{flash.text}</Text>
+        </View>
+      )}
 
       <View style={styles.shell}>
         {loading ? (
@@ -167,18 +193,16 @@ export default function ClientCardsScreen() {
             <View style={styles.headerRow}>
               <View>
                 <Text style={styles.brand}>KOME Club</Text>
-                <Text style={styles.masked}>{maskCard(card.ccnum)}</Text>
+                <Text style={styles.masked}>{showFullNumber ? card.ccnum : maskCard(card.ccnum)}</Text>
               </View>
 
-              <Pressable style={styles.pill} onPress={load}>
-                <Text style={styles.pillText}>Обнови</Text>
+              <Pressable style={styles.trashBtn} onPress={remove} disabled={saving}>
+                <Text style={styles.trashIcon}>🗑</Text>
               </Pressable>
             </View>
 
             <View style={styles.barcodeBox}>
-              <Text style={styles.hint}>
-                Покажи баркода на касата и го сканират директно от телефона.
-              </Text>
+              <Text style={styles.hint}>Покажи баркода на касата и го сканират от екрана.</Text>
 
               <View style={styles.barcodeInner}>
                 <Barcode
@@ -195,9 +219,7 @@ export default function ClientCardsScreen() {
                 />
               </View>
 
-              <Text style={styles.small}>
-                Подсказка: вдигни яркостта на екрана за по-лесно сканиране.
-              </Text>
+              <Text style={styles.small}>Подсказка: увеличи яркостта за по-лесно сканиране.</Text>
             </View>
 
             <View style={styles.actions}>
@@ -207,10 +229,6 @@ export default function ClientCardsScreen() {
 
               <Pressable style={styles.secondary} onPress={() => setManualOpen(true)} disabled={saving}>
                 <Text style={styles.secondaryText}>Въведи ръчно</Text>
-              </Pressable>
-
-              <Pressable style={styles.danger} onPress={remove} disabled={saving}>
-                <Text style={styles.dangerText}>Премахни</Text>
               </Pressable>
             </View>
           </>
@@ -238,18 +256,22 @@ export default function ClientCardsScreen() {
       <Modal
         visible={scanOpen}
         animationType="slide"
-        onRequestClose={() => setScanOpen(false)}
+        presentationStyle="fullScreen"
+        onRequestClose={closeScanner}
       >
-        <SafeAreaView style={styles.modalSafe} edges={["top", "left", "right", "bottom"]}>
+        <SafeAreaView style={modalContainerStyle} edges={[]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Сканиране</Text>
-            <Pressable style={styles.pill} onPress={() => setScanOpen(false)}>
+            <Pressable style={styles.pill} onPress={closeScanner}>
               <Text style={styles.pillText}>Затвори</Text>
             </Pressable>
           </View>
 
           <View style={styles.cameraBox}>
-            <CameraView style={{ flex: 1 }} onBarcodeScanned={onBarcodeScanned} />
+            <CameraView
+              style={{ flex: 1 }}
+              onBarcodeScanned={scanEnabled ? onBarcodeScanned : undefined}
+            />
             <View style={styles.scanFrame} />
           </View>
 
@@ -276,13 +298,14 @@ export default function ClientCardsScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* MANUAL INPUT MODAL */}
+      {/* MANUAL MODAL */}
       <Modal
         visible={manualOpen}
         animationType="slide"
+        presentationStyle="fullScreen"
         onRequestClose={() => setManualOpen(false)}
       >
-        <SafeAreaView style={styles.modalSafe} edges={["top", "left", "right", "bottom"]}>
+        <SafeAreaView style={modalContainerStyle} edges={[]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Въведи номер</Text>
             <Pressable style={styles.pill} onPress={() => setManualOpen(false)}>
@@ -306,10 +329,9 @@ export default function ClientCardsScreen() {
               onPress={() => {
                 const val = normalizeCcnum(manualValue);
                 if (!val || val.length < 6) {
-                  Alert.alert("Невалиден номер");
+                  showFlash("err", "Невалиден номер.", 2200);
                   return;
                 }
-                // тук не затваряме преди save, защото няма flood
                 saveCard(val);
               }}
               disabled={saving}
@@ -329,16 +351,32 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
     padding: 16,
   },
-  modalSafe: {
-    flex: 1,
-    backgroundColor: "#fff",
-    padding: 16,
-  },
 
   title: {
     fontSize: 20,
     fontWeight: "900",
-    marginBottom: 14,
+    marginBottom: 10,
+    color: "#111827",
+  },
+
+  flash: {
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  flashOk: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "#10B981",
+  },
+  flashErr: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#EF4444",
+  },
+  flashText: {
+    fontSize: 13,
+    fontWeight: "800",
     color: "#111827",
   },
 
@@ -360,23 +398,19 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     marginBottom: 4,
   },
-
   masked: {
     fontSize: 18,
     fontWeight: "900",
     color: "#111827",
   },
-
   sub: {
     fontSize: 13,
     color: "#6b7280",
   },
-
   rowCenter: {
     flexDirection: "row",
     alignItems: "center",
   },
-
   headerRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -456,19 +490,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 13,
   },
-  danger: {
-    borderWidth: 1,
-    borderColor: "#ef4444",
-    backgroundColor: "#fff",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-  },
-  dangerText: {
-    color: "#ef4444",
-    fontWeight: "900",
-    fontSize: 13,
-  },
 
   modalHeader: {
     flexDirection: "row",
@@ -523,5 +544,13 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     backgroundColor: "#fff",
+  },
+
+  trashBtn: {
+    padding: 8,
+  },
+  trashIcon: {
+    fontSize: 20,
+    color: "#EF4444",
   },
 });
