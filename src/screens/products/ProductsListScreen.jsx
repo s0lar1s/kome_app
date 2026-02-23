@@ -21,8 +21,8 @@ const ITEM_WIDTH = (SCREEN_WIDTH - H_PADDING * 2 - GAP) / 2;
 const TABS = [
   { label: 'Всички', value: null },
   { label: 'Нови', value: 1 },
-  { label: 'Акцент', value: 2 },
-  { label: 'Фокус', value: 3 },
+  { label: 'Акцент', value: 3 },
+  { label: 'Фокус', value: 2 },
 ];
 
 export default function ProductsListScreen() {
