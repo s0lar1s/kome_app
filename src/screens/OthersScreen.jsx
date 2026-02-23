@@ -18,6 +18,10 @@ export default function OthersScreen({ navigation }) {
     navigation.navigate("ShopsList");
   };
 
+  const goToShoppingList = () => {
+    navigation.navigate("ShoppingList");
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>All others</Text>
@@ -25,6 +29,11 @@ export default function OthersScreen({ navigation }) {
       <TouchableOpacity style={styles.primaryBtn} onPress={goToShops}>
         <Text style={styles.primaryText}>Обекти / Магазини</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity style={styles.primaryBtn} onPress={goToShoppingList}>
+        <Text style={styles.primaryText}>Списък за пазаруване</Text>
+      </TouchableOpacity>
+
 
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
         <Text style={styles.logoutText}>Logout</Text>

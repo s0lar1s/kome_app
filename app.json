@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.kome-app"
+      "bundleIdentifier": "com.anonymous.kome-app",
+      "config": {
+        "googleMapsApiKey": "AIzaSyD8eRWrvsO_cKD5pR3_24BR0KCsF1GwD6Y"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +25,12 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.kome_app"
+      "package": "com.anonymous.kome_app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyD8eRWrvsO_cKD5pR3_24BR0KCsF1GwD6Y"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,7 +7,10 @@ import {
   Pressable,
   RefreshControl,
   TextInput,
+  Linking,
+  Platform,
 } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useNavigation } from '@react-navigation/native';
 import { shopsApi } from '../../Api';
 
@@ -20,12 +23,47 @@ function includesCI(haystack, needle) {
   return norm(haystack).toLowerCase().includes(needle);
 }
 
+function getCoords(item) {
+  const latRaw = item?.lat ?? item?.latitude;
+  const lngRaw = item?.lang ?? item?.lng ?? item?.lon ?? item?.longitude; // 👈 тук е важното
+
+  const lat = Number.parseFloat(String(latRaw ?? '').replace(',', '.'));
+  const lng = Number.parseFloat(String(lngRaw ?? '').replace(',', '.'));
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { latitude: lat, longitude: lng };
+}
+
+function openExternalMaps({ title, address, coords }) {
+  // Ако имаш координати -> по-точно
+  if (coords) {
+    const { latitude, longitude } = coords;
+    const url =
+      Platform.OS === 'ios'
+        ? `http://maps.apple.com/?q=${encodeURIComponent(title || 'Магазин')}&ll=${latitude},${longitude}`
+        : `geo:${latitude},${longitude}?q=${latitude},${longitude}(${encodeURIComponent(title || 'Магазин')})`;
+    Linking.openURL(url).catch(() => {});
+    return;
+  }
+
+  // Ако нямаш координати -> търсене по адрес
+  const q = encodeURIComponent([title, address].filter(Boolean).join(' - '));
+  const url =
+    Platform.OS === 'ios'
+      ? `http://maps.apple.com/?q=${q}`
+      : `geo:0,0?q=${q}`;
+  Linking.openURL(url).catch(() => {});
+}
+
 export default function ShopsListScreen() {
   const navigation = useNavigation();
+  const mapRef = useRef(null);
 
   const [shops, setShops] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
+
+  const [selectedId, setSelectedId] = useState(null);
 
   const activeShops = useMemo(() => {
     if (!Array.isArray(shops)) return [];
@@ -48,6 +86,33 @@ export default function ShopsListScreen() {
     });
   }, [activeShops, q]);
 
+  const shopsWithCoords = useMemo(() => {
+    return filteredShops
+      .map((s) => ({ shop: s, coords: getCoords(s) }))
+      .filter((x) => !!x.coords);
+  }, [filteredShops]);
+
+  const initialRegion = useMemo(() => {
+    // 1) ако има координати – център по първия
+    if (shopsWithCoords.length > 0) {
+      const { latitude, longitude } = shopsWithCoords[0].coords;
+      return {
+        latitude,
+        longitude,
+        latitudeDelta: 0.25,
+        longitudeDelta: 0.25,
+      };
+    }
+
+    // 2) fallback (София)
+    return {
+      latitude: 42.6977,
+      longitude: 23.3219,
+      latitudeDelta: 0.35,
+      longitudeDelta: 0.35,
+    };
+  }, [shopsWithCoords]);
+
   const fetchData = async () => {
     setRefreshing(true);
     try {
@@ -64,8 +129,24 @@ export default function ShopsListScreen() {
     fetchData();
   }, []);
 
-  const openShop = (item) => {
+  const openShopDetails = (item) => {
     navigation.navigate('ShopDetails', { shop: item, id: item?.id });
+  };
+
+  const focusOnShop = (item) => {
+    setSelectedId(item?.id);
+
+    const coords = getCoords(item);
+    if (!coords || !mapRef.current) return;
+
+    mapRef.current.animateToRegion(
+      {
+        ...coords,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      },
+      350
+    );
   };
 
   const renderItem = ({ item }) => {
@@ -76,36 +157,59 @@ export default function ShopsListScreen() {
     const desc = norm(item?.description);
 
     const title = [city, store].filter(Boolean).join(' • ') || 'Обект';
+    const isSelected = String(selectedId) === String(item?.id);
+    const coords = getCoords(item);
 
     return (
-      <Pressable onPress={() => openShop(item)} style={styles.card}>
-        <View style={styles.headerRow}>
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-          {/* <Text style={styles.badge}>ОБЕКТ</Text> */}
+      <View style={[styles.card, isSelected && styles.cardSelected]}>
+        {/* Тап върху “инфо частта” => само фокус на карта */}
+        <Pressable onPress={() => focusOnShop(item)} style={{ gap: 6 }}>
+          <View style={styles.headerRow}>
+            <Text style={styles.title} numberOfLines={1}>
+              {title}
+            </Text>
+            {!!coords && <Text style={styles.pinBadge}>📍</Text>}
+          </View>
+
+          {!!address && (
+            <Text style={styles.meta} numberOfLines={2}>
+              {address}
+            </Text>
+          )}
+
+          {!!workTime && (
+            <Text style={styles.workTime} numberOfLines={2}>
+              Работно време: {workTime}
+            </Text>
+          )}
+
+          {!!desc && (
+            <Text style={styles.desc} numberOfLines={3}>
+              {desc}
+            </Text>
+          )}
+        </Pressable>
+
+        {/* Бутони */}
+        <View style={styles.actionsRow}>
+          <Pressable onPress={() => openShopDetails(item)} style={styles.btnPrimary}>
+            <Text style={styles.btnPrimaryText}>Виж детайли</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() =>
+              openExternalMaps({
+                title,
+                address,
+                coords,
+              })
+            }
+            style={styles.btnGhost}
+          >
+            <Text style={styles.btnGhostText}>Навигация</Text>
+          </Pressable>
         </View>
-
-        {!!address && (
-          <Text style={styles.meta} numberOfLines={2}>
-            {address}
-          </Text>
-        )}
-
-        {!!workTime && (
-          <Text style={styles.workTime} numberOfLines={2}>
-            Работно време: {workTime}
-          </Text>
-        )}
-
-        {!!desc && (
-          <Text style={styles.desc} numberOfLines={3}>
-            {desc}
-          </Text>
-        )}
-
-        <Text style={styles.hint}>Виж детайли →</Text>
-      </Pressable>
+      </View>
     );
   };
 
@@ -121,7 +225,7 @@ export default function ShopsListScreen() {
         style={styles.searchInput}
         autoCapitalize="none"
         autoCorrect={false}
-        clearButtonMode="while-editing" 
+        clearButtonMode="while-editing"
       />
 
       {!!q && (
@@ -134,6 +238,43 @@ export default function ShopsListScreen() {
 
   return (
     <View style={styles.container}>
+      {/* MAP */}
+      <View style={styles.mapWrap}>
+        <MapView
+          ref={mapRef}
+          style={StyleSheet.absoluteFill}
+          provider={PROVIDER_GOOGLE} // ако искаш Apple map на iOS, махни този ред
+          initialRegion={initialRegion}
+        >
+          {shopsWithCoords.map(({ shop, coords }) => {
+            const city = norm(shop?.city);
+            const store = norm(shop?.store);
+            const title = [city, store].filter(Boolean).join(' • ') || 'Обект';
+
+            return (
+              <Marker
+                key={String(shop?.id)}
+                coordinate={coords}
+                title={title}
+                description={norm(shop?.address)}
+                onPress={() => setSelectedId(shop?.id)}
+              />
+            );
+          })}
+        </MapView>
+
+        {/* Ако нямаш координати */}
+        {shopsWithCoords.length === 0 && (
+          <View style={styles.mapOverlay}>
+            <Text style={styles.mapOverlayTitle}>Няма координати за обектите</Text>
+            <Text style={styles.mapOverlayText}>
+              Добави lat/lng в базата (или направи geocoding), за да се показват на картата.
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* LIST */}
       <FlatList
         data={filteredShops}
         keyExtractor={(item) => String(item.id)}
@@ -142,7 +283,7 @@ export default function ShopsListScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchData} />}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={ListHeader}
-        stickyHeaderIndices={[0]} 
+        stickyHeaderIndices={[0]}
         ListEmptyComponent={
           !refreshing ? (
             <View style={styles.emptyWrap}>
@@ -162,6 +303,25 @@ export default function ShopsListScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f8f8' },
+
+  mapWrap: {
+    height: 230,
+    backgroundColor: '#e5e7eb',
+  },
+
+  mapOverlay: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  mapOverlayTitle: { fontSize: 13, fontWeight: '900', color: '#111827', marginBottom: 4 },
+  mapOverlayText: { fontSize: 12, color: '#475569', fontWeight: '700' },
 
   listContent: {
     paddingHorizontal: 16,
@@ -207,7 +367,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     padding: 12,
-    gap: 6,
+    gap: 10,
+  },
+
+  cardSelected: {
+    borderColor: '#6366f1',
   },
 
   headerRow: {
@@ -224,10 +388,10 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
 
-  badge: {
-    fontSize: 11,
+  pinBadge: {
+    fontSize: 12,
     fontWeight: '900',
-    color: '#6366f1',
+    color: '#111827',
   },
 
   meta: { fontSize: 13, color: '#334155' },
@@ -236,7 +400,32 @@ const styles = StyleSheet.create({
 
   desc: { fontSize: 13, color: '#64748b' },
 
-  hint: { marginTop: 2, fontSize: 13, fontWeight: '800', color: '#6366f1' },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+
+  btnPrimary: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6366f1',
+  },
+  btnPrimaryText: { color: '#fff', fontWeight: '900', fontSize: 13 },
+
+  btnGhost: {
+    width: 110,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
+  },
+  btnGhostText: { color: '#111827', fontWeight: '900', fontSize: 13 },
 
   emptyWrap: {
     marginTop: 30,
