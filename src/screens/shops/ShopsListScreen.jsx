@@ -9,8 +9,10 @@ import {
   TextInput,
   Linking,
   Platform,
+  Alert,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { shopsApi } from '../../Api';
 
@@ -25,7 +27,7 @@ function includesCI(haystack, needle) {
 
 function getCoords(item) {
   const latRaw = item?.lat ?? item?.latitude;
-  const lngRaw = item?.lang ?? item?.lng ?? item?.lon ?? item?.longitude; // 👈 тук е важното
+  const lngRaw = item?.lang ?? item?.lng ?? item?.lon ?? item?.longitude;
 
   const lat = Number.parseFloat(String(latRaw ?? '').replace(',', '.'));
   const lng = Number.parseFloat(String(lngRaw ?? '').replace(',', '.'));
@@ -35,7 +37,6 @@ function getCoords(item) {
 }
 
 function openExternalMaps({ title, address, coords }) {
-  // Ако имаш координати -> по-точно
   if (coords) {
     const { latitude, longitude } = coords;
     const url =
@@ -46,7 +47,6 @@ function openExternalMaps({ title, address, coords }) {
     return;
   }
 
-  // Ако нямаш координати -> търсене по адрес
   const q = encodeURIComponent([title, address].filter(Boolean).join(' - '));
   const url =
     Platform.OS === 'ios'
@@ -62,8 +62,11 @@ export default function ShopsListScreen() {
   const [shops, setShops] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
-
   const [selectedId, setSelectedId] = useState(null);
+
+  // USER LOCATION
+  const [userCoords, setUserCoords] = useState(null);
+  const [locDenied, setLocDenied] = useState(false);
 
   const activeShops = useMemo(() => {
     if (!Array.isArray(shops)) return [];
@@ -93,7 +96,16 @@ export default function ShopsListScreen() {
   }, [filteredShops]);
 
   const initialRegion = useMemo(() => {
-    // 1) ако има координати – център по първия
+    // 0) ако имаме user coords -> старт там (по-приятно)
+    if (userCoords) {
+      return {
+        ...userCoords,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
+      };
+    }
+
+    // 1) ако има координати на магазини
     if (shopsWithCoords.length > 0) {
       const { latitude, longitude } = shopsWithCoords[0].coords;
       return {
@@ -111,7 +123,7 @@ export default function ShopsListScreen() {
       latitudeDelta: 0.35,
       longitudeDelta: 0.35,
     };
-  }, [shopsWithCoords]);
+  }, [shopsWithCoords, userCoords]);
 
   const fetchData = async () => {
     setRefreshing(true);
@@ -119,14 +131,53 @@ export default function ShopsListScreen() {
       const res = await shopsApi.getAll();
       setShops(Array.isArray(res?.data) ? res.data : []);
     } catch (e) {
-      alert('Проблем със зареждането на обектите.');
+      Alert.alert('Грешка', 'Проблем със зареждането на обектите.');
     } finally {
       setRefreshing(false);
     }
   };
 
+  // get user location once
+  const getUserLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocDenied(true);
+        return;
+      }
+
+      setLocDenied(false);
+
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const coords = {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+      };
+
+      setUserCoords(coords);
+
+      // ако картата е заредена, центрирай към него (само първия път)
+      if (mapRef.current) {
+        mapRef.current.animateToRegion(
+          {
+            ...coords,
+            latitudeDelta: 0.12,
+            longitudeDelta: 0.12,
+          },
+          350
+        );
+      }
+    } catch (e) {
+      // тиха грешка
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    getUserLocation();
   }, []);
 
   const openShopDetails = (item) => {
@@ -149,6 +200,23 @@ export default function ShopsListScreen() {
     );
   };
 
+  const focusOnMe = async () => {
+    if (!userCoords) {
+      await getUserLocation();
+      return;
+    }
+    if (!mapRef.current) return;
+
+    mapRef.current.animateToRegion(
+      {
+        ...userCoords,
+        latitudeDelta: 0.012,
+        longitudeDelta: 0.012,
+      },
+      350
+    );
+  };
+
   const renderItem = ({ item }) => {
     const city = norm(item?.city);
     const store = norm(item?.store);
@@ -162,7 +230,6 @@ export default function ShopsListScreen() {
 
     return (
       <View style={[styles.card, isSelected && styles.cardSelected]}>
-        {/* Тап върху “инфо частта” => само фокус на карта */}
         <Pressable onPress={() => focusOnShop(item)} style={{ gap: 6 }}>
           <View style={styles.headerRow}>
             <Text style={styles.title} numberOfLines={1}>
@@ -190,20 +257,13 @@ export default function ShopsListScreen() {
           )}
         </Pressable>
 
-        {/* Бутони */}
         <View style={styles.actionsRow}>
           <Pressable onPress={() => openShopDetails(item)} style={styles.btnPrimary}>
             <Text style={styles.btnPrimaryText}>Виж детайли</Text>
           </Pressable>
 
           <Pressable
-            onPress={() =>
-              openExternalMaps({
-                title,
-                address,
-                coords,
-              })
-            }
+            onPress={() => openExternalMaps({ title, address, coords })}
             style={styles.btnGhost}
           >
             <Text style={styles.btnGhostText}>Навигация</Text>
@@ -243,9 +303,19 @@ export default function ShopsListScreen() {
         <MapView
           ref={mapRef}
           style={StyleSheet.absoluteFill}
-          provider={PROVIDER_GOOGLE} // ако искаш Apple map на iOS, махни този ред
+          provider={PROVIDER_GOOGLE}
           initialRegion={initialRegion}
         >
+          {/* USER MARKER */}
+          {userCoords && (
+            <Marker
+              coordinate={userCoords}
+              title="Ти си тук"
+              pinColor="#f59e0b" // жълто/оранжево
+            />
+          )}
+
+          {/* SHOPS MARKERS */}
           {shopsWithCoords.map(({ shop, coords }) => {
             const city = norm(shop?.city);
             const store = norm(shop?.store);
@@ -263,12 +333,27 @@ export default function ShopsListScreen() {
           })}
         </MapView>
 
-        {/* Ако нямаш координати */}
+        {/* BUTTON: MY LOCATION */}
+        <Pressable onPress={focusOnMe} style={styles.myLocBtn}>
+          <Text style={styles.myLocText}>Моята локация</Text>
+        </Pressable>
+
+        {/* Ако няма координати за магазини */}
         {shopsWithCoords.length === 0 && (
           <View style={styles.mapOverlay}>
             <Text style={styles.mapOverlayTitle}>Няма координати за обектите</Text>
             <Text style={styles.mapOverlayText}>
               Добави lat/lng в базата (или направи geocoding), за да се показват на картата.
+            </Text>
+          </View>
+        )}
+
+        {/* Ако локацията е отказана */}
+        {locDenied && (
+          <View style={styles.locOverlay}>
+            <Text style={styles.locOverlayTitle}>Локацията е изключена</Text>
+            <Text style={styles.locOverlayText}>
+              Разреши Location, за да виждаш “Ти си тук”.
             </Text>
           </View>
         )}
@@ -309,6 +394,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
   },
 
+  myLocBtn: {
+    position: 'absolute',
+    right: 12,
+    top: 12,
+    height: 38,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  myLocText: { fontSize: 12, fontWeight: '900', color: '#111827' },
+
   mapOverlay: {
     position: 'absolute',
     left: 12,
@@ -322,6 +422,20 @@ const styles = StyleSheet.create({
   },
   mapOverlayTitle: { fontSize: 13, fontWeight: '900', color: '#111827', marginBottom: 4 },
   mapOverlayText: { fontSize: 12, color: '#475569', fontWeight: '700' },
+
+  locOverlay: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  locOverlayTitle: { fontSize: 13, fontWeight: '900', color: '#111827', marginBottom: 4 },
+  locOverlayText: { fontSize: 12, color: '#475569', fontWeight: '700' },
 
   listContent: {
     paddingHorizontal: 16,
