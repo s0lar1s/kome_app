@@ -1,72 +1,205 @@
-import React from "react";
-import { ScrollView, StyleSheet, Text, View, Pressable, Linking } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useMemo, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-export default function CardHowToGetScreen() {
+const CC_IMG_URL =
+  'https://kome.bg/komeadmin/cc/images/Client_Card_Front.jpg';
+
+function TabButton({ active, label, onPress }) {
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Как да получиш физическа карта</Text>
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      style={({ pressed }) => [
+        styles.tabBtn,
+        active && styles.tabBtnActive,
+        pressed && styles.pressed,
+      ]}
+    >
+      <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
-        <View style={styles.card}>
-          <Text style={styles.h}>Издаване</Text>
-          <Text style={styles.p}>• Картата се издава в обект на КОМЕ.</Text>
-          <Text style={styles.p}>• За лица над 16 години.</Text>
-          <Text style={styles.p}>• Попълва се регистрационен формуляр и се представя лична карта.</Text>
-          <Text style={styles.p}>• Първата карта е безплатна.</Text>
+function Bullet({ children }) {
+  return (
+    <View style={styles.bulletRow}>
+      <Text style={styles.bulletDot}>•</Text>
+      <Text style={styles.bulletText}>{children}</Text>
+    </View>
+  );
+}
 
-          <Text style={[styles.h, { marginTop: 12 }]}>При загуба/повреда</Text>
-          <Text style={styles.p}>• Нова карта се издава срещу 1 лв., който се приспада от натрупаната сума.</Text>
+export default function CardHowToGetScreen({ navigation }) {
+  const [tab, setTab] = useState('physical'); // 'physical' | 'virtual'
 
-          <Text style={[styles.h, { marginTop: 12 }]}>Натрупване на отстъпки</Text>
-          <Text style={styles.p}>• Отстъпки се натрупват при предоставяне на картата на каса преди приключване на бона.</Text>
-          <Text style={styles.p}>• Натрупаните суми се използват само за пазаруване в магазини КОМЕ.</Text>
+  const title = useMemo(() => {
+    return tab === 'physical' ? 'Физическа карта' : 'Виртуална карта';
+  }, [tab]);
 
-          <Text style={[styles.h, { marginTop: 12 }]}>Важно</Text>
-          <Text style={styles.p}>• Ако картата не се използва 6 месеца, натрупаната сума се занулява.</Text>
-          <Text style={styles.p}>• Не се натрупват отстъпки за промоции, тютюневи изделия и лотарийни игри.</Text>
-        </View>
+  const subtitle = useMemo(() => {
+    return tab === 'physical'
+      ? 'Получава се на място в обект.'
+      : 'Регистрираш я сам от телефона – без посещение на магазин.';
+  }, [tab]);
 
-        <View style={styles.card}>
-          <Text style={styles.h}>Лични данни</Text>
-          <Text style={styles.p}>
-            Данните се обработват от „КОМЕ“ ООД само за целите на програмата за лоялни клиенти.
-            Можеш да поискаш прекратяване по всяко време на:
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* HERO */}
+      <View style={styles.heroCard}>
+        <Image source={{ uri: CC_IMG_URL }} style={styles.heroImg} resizeMode="cover" />
+
+        <View style={styles.heroTextWrap}>
+          <Text style={styles.heroTitle}>Клиентска карта KOME CBA</Text>
+          <Text style={styles.heroDesc} numberOfLines={2}>
+            Събираш пари от покупките си и ги използваш във всички магазини.
           </Text>
-
-          <Pressable onPress={() => Linking.openURL("mailto:dpo.kome@cba.bg")} style={styles.mailBtn}>
-            <Text style={styles.mailText}>dpo.kome@cba.bg</Text>
-          </Pressable>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+
+      {/* TABS */}
+      <View style={styles.tabsWrap}>
+        <TabButton
+          label="Физическа"
+          active={tab === 'physical'}
+          onPress={() => setTab('physical')}
+        />
+        <TabButton
+          label="Виртуална"
+          active={tab === 'virtual'}
+          onPress={() => setTab('virtual')}
+        />
+      </View>
+
+      {/* CONTENT CARD */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{title}</Text>
+        <Text style={styles.cardSub}>{subtitle}</Text>
+
+        {tab === 'physical' ? (
+          <>
+            <View style={styles.divider} />
+
+            <Text style={styles.sectionH}>Как се взима</Text>
+            <Bullet>Посети удобен за теб магазин KOME CBA.</Bullet>
+            <Bullet>Поискай издаване на клиентска карта на каса/инфо точка (според обекта).</Bullet>
+            <Bullet>Картата се активира и започваш да я ползваш веднага.</Bullet>
+
+            <View style={styles.divider} />
+
+            <Text style={styles.sectionH}>Кога е подходяща</Text>
+            <Bullet>Ако предпочиташ пластика в портфейла си.</Bullet>
+            <Bullet>Ако не искаш да използваш телефон при пазаруване.</Bullet>
+          </>
+        ) : (
+          <>
+            <View style={styles.divider} />
+
+            <Text style={styles.sectionH}>Как работи</Text>
+            <Bullet>Създаваш я сам през приложението – за минута.</Bullet>
+            <Bullet>Не е нужно да ходиш до обект за издаване.</Bullet>
+            <Bullet>Ползваш я директно от телефона при пазаруване.</Bullet>
+
+            <View style={styles.divider} />
+
+            <Text style={styles.sectionH}>Важно</Text>
+            <Bullet>
+              Виртуалната карта е <Text style={styles.bold}>абсолютно същата</Text> като физическата –
+              същите правила, същото натрупване и използване.
+            </Bullet>
+            <Bullet>Разликата е само в начина на издаване и носене – в телефона.</Bullet>
+
+            {/* <Pressable
+              onPress={() => navigation.navigate('VirtualCardCreate')}
+              style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
+            >
+              <Text style={styles.primaryBtnText}>Създай виртуална карта</Text>
+            </Pressable> */}
+          </>
+        )}
+      </View>
+
+      {/* FOOT NOTE */}
+      <Text style={styles.footNote}>
+        Ако вече имаш карта, можеш да я добавиш към профила си от „Карти“.
+      </Text>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { padding: 16, paddingBottom: 24, gap: 12 },
-  title: { fontSize: 20, fontWeight: "900", color: "#111827" },
+  container: { flex: 1, backgroundColor: '#f6f7fb' },
+  content: { padding: 16, paddingBottom: 24 },
+
+  heroCard: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  heroImg: { width: '100%', height: 170, backgroundColor: '#f1f5f9' },
+  heroTextWrap: { padding: 14 },
+  heroTitle: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
+  heroDesc: { marginTop: 4, fontSize: 13, color: '#64748b', lineHeight: 18 },
+
+  tabsWrap: {
+    marginTop: 12,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  tabBtn: {
+    flex: 1,
+    borderRadius: 999,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+  },
+  tabBtnActive: {
+    backgroundColor: '#111827',
+    borderColor: '#111827',
+  },
+  tabBtnText: { fontSize: 13, fontWeight: '900', color: '#0f172a' },
+  tabBtnTextActive: { color: '#fff' },
 
   card: {
-    backgroundColor: "#fff",
+    marginTop: 12,
     borderRadius: 18,
-    padding: 16,
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: '#e5e7eb',
+    padding: 14,
   },
-  h: { fontSize: 14, fontWeight: "900", color: "#111827", marginBottom: 6 },
-  p: { fontSize: 13, color: "#374151", marginBottom: 6, lineHeight: 18 },
+  cardTitle: { fontSize: 16, fontWeight: '900', color: '#0f172a' },
+  cardSub: { marginTop: 4, fontSize: 13, color: '#64748b', lineHeight: 18 },
 
-  mailBtn: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    alignSelf: "flex-start",
-    backgroundColor: "#fff",
+  divider: {
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 12,
   },
-  mailText: { fontSize: 13, fontWeight: "900", color: "#111827" },
+
+  sectionH: { fontSize: 14, fontWeight: '900', color: '#0f172a', marginBottom: 8 },
+
+  bulletRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  bulletDot: { fontSize: 16, lineHeight: 20, color: '#0f172a' },
+  bulletText: { flex: 1, fontSize: 13, lineHeight: 18, color: '#334155' },
+
+  bold: { fontWeight: '900', color: '#0f172a' },
+
+  primaryBtn: {
+    marginTop: 12,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: '#111827',
+  },
+  primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: '900' },
+
+  footNote: { marginTop: 12, fontSize: 12, color: '#64748b', lineHeight: 16 },
+
+  pressed: { opacity: 0.9 },
 });

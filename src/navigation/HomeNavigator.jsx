@@ -6,7 +6,9 @@ import ClientCardsScreen from "../screens/ClientCardsScreen";
 import BannersDetailsScreen from "../screens/BannersDetailScreen";
 import ProductsListScreen from "../screens/products/ProductsListScreen";
 import ProductsScreen from "../screens/products/ProductsScreen";
-
+import CardHowToGetScreen from "../screens/CardHowToGetScreen";
+import ShopsListScreen from "../screens/shops/ShopsListScreen";
+import ClientCardsNavigator from "./ClientCardsNavigator.jsx";
 
 import { useAuth } from "../contexts/auth/useAuth.js";
 
@@ -30,8 +32,6 @@ export default function HomeNavigator() {
         })}
       />
 
-      <Stack.Screen name="ClientCards" component={ClientCardsScreen} />
-
       <Stack.Screen
         name="BannersDetail"
         component={BannersDetailsScreen}
@@ -40,11 +40,10 @@ export default function HomeNavigator() {
         })}
       />
 
-      {/* PRODUCTS */}
       <Stack.Screen
         name="Products"
         component={ProductsListScreen}
-        options={{ title: "Продукти" }}
+        options={{ title: "Продукти" }} 
       />
 
       <Stack.Screen
@@ -52,6 +51,35 @@ export default function HomeNavigator() {
         component={ProductsScreen}
         options={{ title: "Продукт" }}
       />
+
+      
+      <Stack.Screen
+          name="ClientCardsFlow"
+          component={ClientCardsNavigator}
+          options={{
+              headerShown: true,
+              title: "Клиентска карта",
+            }}
+      />
+      
+      <Stack.Screen
+          name="CardHowToGet"
+          component={CardHowToGetScreen}
+          options={{
+              headerShown: true,
+              title: "Информация",
+            }}
+      />
+
+      <Stack.Screen
+          name="ShopsList"
+          component={ShopsListScreen}
+          options={{
+              headerShown: true,
+              title: "Информация",
+            }}
+      />
+
     </Stack.Navigator>
   );
 }
