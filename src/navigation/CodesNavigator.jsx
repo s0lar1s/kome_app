@@ -1,19 +1,23 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import CodesScreen from "../screens/CodesScreen";
+import PromoCodesListScreen from "../screens/promocodes/PromoCodesListScreen";
+import PromoCodeDetailsScreen from "../screens/promocodes/PromoCodeDetailsScreen";
 
+const Stack = createNativeStackNavigator();
 
 export default function CodesNavigator() {
-    const Stack = createNativeStackNavigator();
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="Codes"
+        component={PromoCodesListScreen}
+        options={{ title: "Промо кодове" }}
+      />
 
-    return (
-        <Stack.Navigator>
-            <Stack.Screen 
-                name="Codes" 
-                component={CodesScreen} 
-                options={{
-                    title: "Промо кодове",
-                }}
-            />
-        </Stack.Navigator>
-    );
+      <Stack.Screen
+        name="PromoCodeDetails"
+        component={PromoCodeDetailsScreen}
+        options={{ title: "" }}
+      />
+    </Stack.Navigator>
+  );
 }

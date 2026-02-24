@@ -5,10 +5,15 @@ export async function getMine() {
 }
 
 export async function setCard(data) {
-  // data: { ccnum }
   return api.post("/client-cards", data);
 }
 
 export async function removeCard() {
   return api.delete("/client-cards");
 }
+
+export async function createVirtual(data) {
+  return api.post("/client-cards/virtual", data);
+}
+
+

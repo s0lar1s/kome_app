@@ -15,6 +15,7 @@ import {
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Barcode } from "expo-barcode-generator";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../contexts/auth/useAuth.js";
 import { clientCardsApi } from "../Api/index.js";
 
@@ -30,10 +31,15 @@ function normalizeCcnum(raw) {
 
 export default function ClientCardsScreen() {
   const { isAuthenticated } = useAuth();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(false);
   const [card, setCard] = useState(null);
+
+  // virtual hint from backend
+  const [virtualAvailable, setVirtualAvailable] = useState(false);
+  const [virtualCcnum, setVirtualCcnum] = useState(null);
 
   const [scanOpen, setScanOpen] = useState(false);
   const [scanEnabled, setScanEnabled] = useState(false);
@@ -62,14 +68,20 @@ export default function ClientCardsScreen() {
     };
   }, []);
 
-  const canScan = useMemo(() => scanOpen && scanEnabled && !saving, [scanOpen, scanEnabled, saving]);
+  const canScan = useMemo(
+    () => scanOpen && scanEnabled && !saving,
+    [scanOpen, scanEnabled, saving]
+  );
 
   const load = async () => {
     if (!isAuthenticated) return;
     setLoading(true);
     try {
       const res = await clientCardsApi.getMine();
-      setCard(res?.data?.card ?? null);
+      const data = res?.data || {};
+      setCard(data?.card ?? null);
+      setVirtualAvailable(!!data?.virtual_available);
+      setVirtualCcnum(data?.virtual_ccnum ?? null);
     } catch {
       showFlash("err", "Проблем със зареждането на картата.");
     } finally {
@@ -80,6 +92,12 @@ export default function ClientCardsScreen() {
   useEffect(() => {
     load();
   }, [isAuthenticated]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isAuthenticated) load();
+    }, [isAuthenticated])
+  );
 
   const openScanner = async () => {
     if (!permission?.granted) {
@@ -109,39 +127,45 @@ export default function ClientCardsScreen() {
       setManualOpen(false);
       setManualValue("");
 
+      // refresh hints
+      await load();
+
       if (fullTimerRef.current) clearTimeout(fullTimerRef.current);
       setShowFullNumber(true);
-      showFlash("ok", "Картата е добавена. Проверете номера.", 8000);
+      showFlash("ok", "Картата е добавена. Проверете номера.", 6000);
 
-      fullTimerRef.current = setTimeout(() => {
-        setShowFullNumber(false);
-      }, 5000);
+      fullTimerRef.current = setTimeout(() => setShowFullNumber(false), 4500);
     } catch (e) {
       const msg = e?.response?.data?.error || e?.message || "Неуспешно записване.";
       showFlash("err", msg, 3000);
-
       if (scanOpen) setScanEnabled(true);
     } finally {
       setSaving(false);
     }
   };
 
+  const addVirtualNow = async () => {
+    if (!virtualCcnum) {
+      showFlash("err", "Няма налична виртуална карта.", 2200);
+      return;
+    }
+    await saveCard(String(virtualCcnum));
+  };
+
   const onBarcodeScanned = async ({ data }) => {
     if (!canScan) return;
-
     const ccnum = normalizeCcnum(data);
     if (!ccnum || ccnum.length < 6) return;
 
     setScanEnabled(false);
     setScanOpen(false);
-
     await saveCard(ccnum);
   };
 
   const remove = () => {
     Alert.alert(
       "Премахване на карта",
-      "Сигурни ли сте, че искате да премахнете тази клиентска карта?",
+      "Сигурни ли сте, че искате да премахнете тази клиентска карта от приложението?",
       [
         { text: "Отказ", style: "cancel" },
         {
@@ -151,6 +175,7 @@ export default function ClientCardsScreen() {
             try {
               await clientCardsApi.removeCard();
               setCard(null);
+              await load();
               showFlash("ok", "Картата беше премахната.");
             } catch {
               showFlash("err", "Не успях да премахна картата.", 2500);
@@ -170,11 +195,19 @@ export default function ClientCardsScreen() {
     paddingBottom: (insets?.bottom ?? 0) + 12,
   };
 
+  const goHowToGet = () => navigation.navigate("CardHowToGet");
+  const goVirtual = () => navigation.navigate("VirtualCardCreate");
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <RNStatusBar barStyle="dark-content" />
 
-      <Text style={styles.title}>Клиентска карта</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Клиентска карта</Text>
+        <Text style={styles.subtitle}>
+          На касата показваш баркода от телефона и го сканират от екрана.
+        </Text>
+      </View>
 
       {flash && (
         <View style={[styles.flash, flash.type === "ok" ? styles.flashOk : styles.flashErr]}>
@@ -182,27 +215,33 @@ export default function ClientCardsScreen() {
         </View>
       )}
 
-      <View style={styles.shell}>
+      <View style={styles.panel}>
         {loading ? (
           <View style={styles.rowCenter}>
             <ActivityIndicator />
-            <Text style={styles.sub}> Зареждане…</Text>
+            <Text style={styles.muted}> Зареждане…</Text>
           </View>
         ) : card ? (
           <>
-            <View style={styles.headerRow}>
+            <View style={styles.cardTopRow}>
               <View>
-                <Text style={styles.brand}>KOME Club</Text>
-                <Text style={styles.masked}>{showFullNumber ? card.ccnum : maskCard(card.ccnum)}</Text>
+                <Text style={styles.kicker}>KOME Club</Text>
+                <Text style={styles.ccnum}>
+                  {showFullNumber ? card.ccnum : maskCard(card.ccnum)}
+                </Text>
               </View>
 
-              <Pressable style={styles.trashBtn} onPress={remove} disabled={saving}>
-                <Text style={styles.trashIcon}>🗑</Text>
+              <Pressable
+                style={[styles.iconBtn, saving && { opacity: 0.6 }]}
+                onPress={remove}
+                disabled={saving}
+              >
+                <Text style={styles.iconBtnText}>🗑</Text>
               </Pressable>
             </View>
 
-            <View style={styles.barcodeBox}>
-              <Text style={styles.hint}>Покажи баркода на касата и го сканират от екрана.</Text>
+            <View style={styles.barcodeCard}>
+              <Text style={styles.barcodeHint}>Покажи баркода на касата:</Text>
 
               <View style={styles.barcodeInner}>
                 <Barcode
@@ -210,7 +249,7 @@ export default function ClientCardsScreen() {
                   options={{
                     format: "CODE128",
                     width: 2,
-                    height: 90,
+                    height: 92,
                     displayValue: false,
                     background: "#FFFFFF",
                     lineColor: "#111827",
@@ -219,34 +258,98 @@ export default function ClientCardsScreen() {
                 />
               </View>
 
-              <Text style={styles.small}>Подсказка: увеличи яркостта за по-лесно сканиране.</Text>
+              <Text style={styles.micro}>Подсказка: увеличи яркостта за по-лесно сканиране.</Text>
             </View>
 
-            <View style={styles.actions}>
-              <Pressable style={styles.primary} onPress={openScanner} disabled={saving}>
-                <Text style={styles.primaryText}>Сканирай нова</Text>
+            <View style={styles.btnRow}>
+              <Pressable
+                style={[styles.btnPrimary, saving && { opacity: 0.7 }]}
+                onPress={openScanner}
+                disabled={saving}
+              >
+                <Text style={styles.btnPrimaryText}>Сканирай нова</Text>
               </Pressable>
 
-              <Pressable style={styles.secondary} onPress={() => setManualOpen(true)} disabled={saving}>
-                <Text style={styles.secondaryText}>Въведи ръчно</Text>
+              <Pressable
+                style={[styles.btnOutline, saving && { opacity: 0.7 }]}
+                onPress={() => setManualOpen(true)}
+                disabled={saving}
+              >
+                <Text style={styles.btnOutlineText}>Въведи ръчно</Text>
               </Pressable>
             </View>
           </>
         ) : (
           <>
-            <Text style={styles.brand}>KOME Club</Text>
-            <Text style={[styles.sub, { marginTop: 4, marginBottom: 14 }]}>
-              Нямаш добавена карта. Добави я веднъж и после я носиш в телефона си.
-            </Text>
+            <View style={styles.emptyTop}>
+              <Text style={styles.kicker}>KOME Club</Text>
+              <Text style={styles.emptyTitle}>Нямаш добавена карта</Text>
+              <Text style={styles.muted}>
+                Избери удобния за теб вариант — физическа (сканиране/ръчно) или виртуална карта.
+              </Text>
+            </View>
 
-            <View style={styles.actions}>
-              <Pressable style={styles.primary} onPress={openScanner} disabled={saving}>
-                <Text style={styles.primaryText}>Сканирай карта</Text>
+            {/* ВИНАГИ: физическа карта */}
+            <View style={styles.group}>
+              <Text style={styles.groupTitle}>Физическа карта</Text>
+              <Pressable
+                style={[styles.btnPrimaryWide, saving && { opacity: 0.7 }]}
+                onPress={openScanner}
+                disabled={saving}
+              >
+                <Text style={styles.btnPrimaryText}>Сканирай карта</Text>
               </Pressable>
 
-              <Pressable style={styles.secondary} onPress={() => setManualOpen(true)} disabled={saving}>
-                <Text style={styles.secondaryText}>Въведи ръчно</Text>
+              <View style={styles.btnRow}>
+                <Pressable
+                  style={[styles.btnOutline, { flex: 1 }, saving && { opacity: 0.7 }]}
+                  onPress={() => setManualOpen(true)}
+                  disabled={saving}
+                >
+                  <Text style={styles.btnOutlineText}>Въведи ръчно</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.btnGhost, { flex: 1 }, saving && { opacity: 0.7 }]}
+                  onPress={goHowToGet}
+                  disabled={saving}
+                >
+                  <Text style={styles.btnGhostText}>Как да получа карта</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {/* ВИНАГИ: виртуална карта */}
+            <View style={styles.group}>
+              <Text style={styles.groupTitle}>Виртуална карта</Text>
+
+              {virtualAvailable && virtualCcnum ? (
+                <Pressable
+                  style={[styles.btnPrimaryWide, saving && { opacity: 0.7 }]}
+                  onPress={addVirtualNow}
+                  disabled={saving}
+                >
+                  <Text style={styles.btnPrimaryText}>Добави виртуалната ми карта</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.infoLine}>
+                  <Text style={styles.muted}>
+                    Нямаш създадена виртуална карта. Можеш да я направиш за минута.
+                  </Text>
+                </View>
+              )}
+
+              <Pressable
+                style={[styles.btnOutlineWide, saving && { opacity: 0.7 }]}
+                onPress={goVirtual}
+                disabled={saving}
+              >
+                <Text style={styles.btnOutlineText}>Създай виртуална карта</Text>
               </Pressable>
+
+              <Text style={styles.micro}>
+                Виртуалната карта се показва като баркод в телефона и се използва на касата.
+              </Text>
             </View>
           </>
         )}
@@ -278,21 +381,21 @@ export default function ClientCardsScreen() {
           {saving ? (
             <View style={[styles.rowCenter, { marginTop: 12 }]}>
               <ActivityIndicator />
-              <Text style={styles.sub}> Записвам…</Text>
+              <Text style={styles.muted}> Записвам…</Text>
             </View>
           ) : (
-            <Text style={[styles.sub, { marginTop: 12 }]}>
+            <Text style={[styles.muted, { marginTop: 12 }]}>
               Насочи камерата към баркода — записът става автоматично.
             </Text>
           )}
 
           {__DEV__ && (
             <Pressable
-              style={[styles.secondary, { marginTop: 12 }]}
+              style={[styles.btnOutline, { marginTop: 12 }]}
               onPress={() => onBarcodeScanned({ data: "1234567890123" })}
               disabled={saving}
             >
-              <Text style={styles.secondaryText}>Simulate scan (DEV)</Text>
+              <Text style={styles.btnOutlineText}>Simulate scan (DEV)</Text>
             </Pressable>
           )}
         </SafeAreaView>
@@ -313,8 +416,8 @@ export default function ClientCardsScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.inputCard}>
-            <Text style={styles.inputLabel}>Номер на карта</Text>
+          <View style={styles.formCard}>
+            <Text style={styles.label}>Номер на карта</Text>
 
             <TextInput
               style={styles.input}
@@ -325,7 +428,7 @@ export default function ClientCardsScreen() {
             />
 
             <Pressable
-              style={[styles.primary, { marginTop: 12 }]}
+              style={[styles.btnPrimaryWide, { marginTop: 12 }, saving && { opacity: 0.7 }]}
               onPress={() => {
                 const val = normalizeCcnum(manualValue);
                 if (!val || val.length < 6) {
@@ -336,7 +439,7 @@ export default function ClientCardsScreen() {
               }}
               disabled={saving}
             >
-              <Text style={styles.primaryText}>{saving ? "Записвам…" : "Запази"}</Text>
+              <Text style={styles.btnPrimaryText}>{saving ? "Записвам…" : "Запази"}</Text>
             </Pressable>
           </View>
         </SafeAreaView>
@@ -346,93 +449,50 @@ export default function ClientCardsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-    padding: 16,
-  },
+  safe: { flex: 1, backgroundColor: "#f4f6fb", padding: 16 },
 
-  title: {
-    fontSize: 20,
-    fontWeight: "900",
-    marginBottom: 10,
-    color: "#111827",
-  },
+  header: { marginBottom: 10 },
+  title: { fontSize: 22, fontWeight: "900", color: "#111827" },
+  subtitle: { marginTop: 6, fontSize: 13, color: "#6b7280", lineHeight: 18 },
 
-  flash: {
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-  },
-  flashOk: {
-    backgroundColor: "#ECFDF5",
-    borderColor: "#10B981",
-  },
-  flashErr: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#EF4444",
-  },
-  flashText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#111827",
-  },
+  flash: { borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12, borderWidth: 1 },
+  flashOk: { backgroundColor: "#ECFDF5", borderColor: "#10B981" },
+  flashErr: { backgroundColor: "#FEF2F2", borderColor: "#EF4444" },
+  flashText: { fontSize: 13, fontWeight: "800", color: "#111827" },
 
-  shell: {
+  panel: {
     backgroundColor: "#fff",
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: "#e5e7eb",
     shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
+    shadowOpacity: 0.06,
+    shadowRadius: 22,
     elevation: 4,
   },
 
-  brand: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#6b7280",
-    marginBottom: 4,
-  },
-  masked: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#111827",
-  },
-  sub: {
-    fontSize: 13,
-    color: "#6b7280",
-  },
-  rowCenter: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-  },
+  rowCenter: { flexDirection: "row", alignItems: "center" },
+  muted: { fontSize: 13, color: "#6b7280" },
 
-  pill: {
+  kicker: { fontSize: 12, fontWeight: "900", color: "#6b7280" },
+  ccnum: { marginTop: 4, fontSize: 19, fontWeight: "900", color: "#111827" },
+
+  cardTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
+
+  iconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
+    borderColor: "#e5e7eb",
     backgroundColor: "#fff",
   },
-  pillText: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#111827",
-  },
+  iconBtnText: { fontSize: 18 },
 
-  barcodeBox: {
+  barcodeCard: {
     marginTop: 14,
     borderWidth: 1,
     borderColor: "#e5e7eb",
@@ -440,11 +500,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fafafa",
     padding: 12,
   },
-  hint: {
-    fontSize: 12,
-    color: "#374151",
-    marginBottom: 10,
-  },
+  barcodeHint: { fontSize: 12, color: "#374151", marginBottom: 10, fontWeight: "700" },
   barcodeInner: {
     alignItems: "center",
     justifyContent: "center",
@@ -454,55 +510,85 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 10,
   },
-  small: {
-    marginTop: 8,
-    fontSize: 12,
-    color: "#6b7280",
-  },
+  micro: { marginTop: 8, fontSize: 12, color: "#6b7280", lineHeight: 18 },
 
-  actions: {
-    marginTop: 14,
-    flexDirection: "row",
-    flexWrap: "wrap",
+  emptyTop: { gap: 6, marginBottom: 6 },
+  emptyTitle: { fontSize: 16, fontWeight: "900", color: "#111827" },
+
+  group: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#fafafa",
     gap: 10,
   },
-  primary: {
+  groupTitle: { fontSize: 13, fontWeight: "900", color: "#111827" },
+  infoLine: { paddingVertical: 2 },
+
+  btnRow: { flexDirection: "row", gap: 10 },
+
+  btnPrimary: {
     backgroundColor: "#111827",
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 14,
   },
-  primaryText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 13,
+  btnPrimaryWide: {
+    backgroundColor: "#111827",
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    alignItems: "center",
   },
-  secondary: {
+  btnPrimaryText: { color: "#fff", fontWeight: "900", fontSize: 13 },
+
+  btnOutline: {
     borderWidth: 1,
     borderColor: "#d1d5db",
     backgroundColor: "#fff",
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 14,
-  },
-  secondaryText: {
-    color: "#111827",
-    fontWeight: "900",
-    fontSize: 13,
-  },
-
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    gap: 12,
-    marginBottom: 12,
+    justifyContent: "center",
   },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#111827",
+  btnOutlineWide: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#fff",
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    alignItems: "center",
   },
+  btnOutlineText: { color: "#111827", fontWeight: "900", fontSize: 13 },
+
+  btnGhost: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f3f4f6",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnGhostText: { color: "#111827", fontWeight: "900", fontSize: 13 },
+
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 },
+  modalTitle: { fontSize: 16, fontWeight: "900", color: "#111827" },
+
+  pill: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "#fff",
+  },
+  pillText: { fontSize: 13, fontWeight: "900", color: "#111827" },
 
   cameraBox: {
     height: 420,
@@ -524,19 +610,14 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.95)",
   },
 
-  inputCard: {
+  formCard: {
     backgroundColor: "#fff",
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
     borderColor: "#e5e7eb",
   },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#111827",
-    marginBottom: 8,
-  },
+  label: { fontSize: 13, fontWeight: "900", color: "#111827", marginBottom: 8 },
   input: {
     borderWidth: 1,
     borderColor: "#d1d5db",
@@ -544,13 +625,5 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     backgroundColor: "#fff",
-  },
-
-  trashBtn: {
-    padding: 8,
-  },
-  trashIcon: {
-    fontSize: 20,
-    color: "#EF4444",
   },
 });

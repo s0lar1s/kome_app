@@ -24,7 +24,6 @@ api.interceptors.request.use(
         }
       }
     } catch (e) {
-      // не спираме заявката, просто не слагаме токен
       console.log("Auth token read error:", e?.message || e);
     }
 
