@@ -20,11 +20,9 @@ const CARD_GAP = 12;
 
 const BANNER_CARD_WIDTH = SCREEN_WIDTH - H_PADDING * 2;
 
-// 📘 Брошури
 const BROCHURE_CARD_WIDTH_BASE = SCREEN_WIDTH - H_PADDING * 2;
 const BROCHURE_PEEK = 32;
 
-// 📦 Продукти (2.2 на ред)
 const PRODUCT_CARD_WIDTH =
   (SCREEN_WIDTH - H_PADDING * 2 - CARD_GAP) / 2.2;
 

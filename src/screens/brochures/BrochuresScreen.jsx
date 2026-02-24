@@ -83,7 +83,7 @@ export default function BrochuresScreen({ route }) {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>{brochure?.title || 'Седмична брошура'}</Text>
-        {brochure?.category ? <Text style={styles.title2}>Категория: {brochure.category}</Text> : null}
+        {/* {brochure?.category ? <Text style={styles.title2}>Категория: {brochure.category}</Text> : null} */}
       </View>
 
       {viewerUrl ? (
@@ -130,7 +130,11 @@ export default function BrochuresScreen({ route }) {
         </View>
       )}
       <View style={styles.footer}>
-        <Text style={styles.title}>{brochure?.title || 'Седмична брошура'}</Text>
+        {brochure?.date_end ? (
+          <Text style={styles.title}>
+            Валидна до {brochure.date_end}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
