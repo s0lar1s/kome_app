@@ -7,13 +7,16 @@ import {
   Image,
   ActivityIndicator,
   Dimensions,
+  Pressable,
+  Alert,
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { Barcode } from 'expo-barcode-generator';
+import * as Clipboard from 'expo-clipboard';
 import { promoCodesApi } from '../../Api';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const IMAGE_SIZE = SCREEN_WIDTH;
+const CARD_PADDING = 16;
 
 const PROMO_BASE = 'https://kome.bg/komeadmin/promocodes/images/';
 
@@ -32,21 +35,16 @@ function toUrl(base, value) {
   return base + encoded;
 }
 
-function categoryLabel(cat) {
-  switch (Number(cat)) {
-    case 1:
-      return 'Категория 1';
-    case 2:
-      return 'Категория 2';
-    case 3:
-      return 'Категория 3';
-    default:
-      return null;
-  }
-}
-
 function normCode(v) {
   return String(v ?? '').trim();
+}
+
+function typeLabel(item) {
+  // седмични = category 1 (по твоята логика)
+  if (Number(item?.category) === 1) return 'Седмичен код';
+  // персонален = is_personal=1 (идва от API)
+  if (Number(item?.is_personal) === 1) return 'Персонален код';
+  return 'Промо код';
 }
 
 export default function PromoCodeDetailsScreen() {
@@ -65,7 +63,7 @@ export default function PromoCodeDetailsScreen() {
         if (!mounted) return;
         setItem(result?.data ?? null);
       } catch (e) {
-        alert('Проблем при зареждане на промо кода.');
+        Alert.alert('Грешка', 'Проблем при зареждане на промо кода.');
       } finally {
         if (mounted) setLoading(false);
       }
@@ -78,6 +76,13 @@ export default function PromoCodeDetailsScreen() {
   }, [id]);
 
   const code = useMemo(() => normCode(item?.code), [item?.code]);
+  const imgUrl = useMemo(() => toUrl(PROMO_BASE, item?.image), [item?.image]);
+
+  async function copyCode() {
+    if (!code) return;
+    await Clipboard.setStringAsync(code);
+    Alert.alert('Готово', 'Кодът е копиран.');
+  }
 
   if (loading) {
     return (
@@ -95,40 +100,44 @@ export default function PromoCodeDetailsScreen() {
     );
   }
 
-  const imgUrl = toUrl(PROMO_BASE, item.image);
-  const badge = categoryLabel(item.category);
+  const chip = typeLabel(item);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 28 }}>
-      <View style={styles.imageWrapper}>
-        {!!imgUrl && (
-          <Image source={{ uri: imgUrl }} style={styles.image} resizeMode="cover" />
-        )}
-
-        {badge && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{badge}</Text>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentWrap}>
+      {/* Image card */}
+      <View style={styles.heroCard}>
+        {!!imgUrl ? (
+          <Image source={{ uri: imgUrl }} style={styles.heroImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.heroPlaceholder}>
+            <Text style={styles.heroPlaceholderText}>Няма снимка</Text>
           </View>
         )}
+
+        <View style={styles.chip}>
+          <Text style={styles.chipText}>{chip}</Text>
+        </View>
       </View>
 
-      {/* Barcode + code */}
+      {/* Barcode card */}
       <View style={styles.barcodeCard}>
-        <Text style={styles.barcodeTitle}>Твоят промо код</Text>
+        <View style={styles.barcodeHeader}>
+          <Text style={styles.barcodeTitle}>Сканирай на каса</Text>
+          {!!code ? (
+            <Pressable onPress={copyCode} style={styles.copyBtn}>
+              <Text style={styles.copyBtnText}>Копирай</Text>
+            </Pressable>
+          ) : null}
+        </View>
 
-        {code ? (
+        {!!code ? (
           <>
             <View style={styles.barcodeWrap}>
-              <Barcode
-                value={code}
-                options={{ format: 'CODE128' }}
-                style={styles.barcode}
-              />
+              <Barcode value={code} options={{ format: 'CODE128' }} style={styles.barcode} />
             </View>
 
-            <Text style={styles.codeText}>{code}</Text>
             <Text style={styles.hintText}>
-              Покажи кода на каса или го въведи при нужда.
+              Покажи баркода на каса. Ако ти поискат код – натисни „Копирай“.
             </Text>
           </>
         ) : (
@@ -136,58 +145,96 @@ export default function PromoCodeDetailsScreen() {
         )}
       </View>
 
-      <View style={styles.content}>
-        {!!item.title && <Text style={styles.title}>{item.title}</Text>}
-        {!!item.description && <Text style={styles.description}>{item.description}</Text>}
+      {/* Text content */}
+      <View style={styles.textCard}>
+        {!!item.title ? <Text style={styles.title}>{item.title}</Text> : null}
+        {!!item.description ? (
+          <Text style={styles.description}>{item.description}</Text>
+        ) : (
+          <Text style={styles.descriptionMuted}>Няма допълнителна информация.</Text>
+        )}
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f8f8' },
-
+  container: { flex: 1, backgroundColor: '#f3f4f6' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  imageWrapper: { position: 'relative' },
-
-  image: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
-    backgroundColor: '#f1f5f9',
+  contentWrap: {
+    padding: CARD_PADDING,
+    paddingBottom: 28,
+    gap: 12,
   },
 
-  badge: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-
-  badgeText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-
-  barcodeCard: {
-    marginTop: 12,
-    marginHorizontal: 16,
+  // Hero image card
+  heroCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.10,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  heroImage: {
+    width: '100%',
+    height: Math.round(SCREEN_WIDTH * 0.62),
+    backgroundColor: '#e5e7eb',
+  },
+  heroPlaceholder: {
+    width: '100%',
+    height: Math.round(SCREEN_WIDTH * 0.62),
+    backgroundColor: '#e5e7eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroPlaceholderText: {
+    color: '#6b7280',
+    fontWeight: '700',
+  },
+  chip: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: 'rgba(17,24,39,0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  chipText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+
+  // Barcode card
+  barcodeCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
     padding: 14,
     shadowColor: '#000',
     shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
     elevation: 2,
   },
-
-  barcodeTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#111827',
+  barcodeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 10,
   },
+  barcodeTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#111827',
+  },
+  copyBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#111827',
+  },
+  copyBtnText: { color: '#fff', fontWeight: '900', fontSize: 12 },
 
   barcodeWrap: {
     width: '100%',
@@ -195,38 +242,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 8,
   },
-
-  // expo-barcode-generator е view; ширина/височина идват от layout-а.
   barcode: {
     width: '100%',
-    height: 90,
+    height: 86,
   },
-
-  codeText: {
-    marginTop: 10,
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    color: '#111827',
-    textAlign: 'center',
-  },
-
   hintText: {
-    marginTop: 6,
+    marginTop: 8,
     fontSize: 13,
     lineHeight: 18,
     color: '#6b7280',
     textAlign: 'center',
   },
 
-  content: { padding: 16 },
-
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 10,
+  // Text card
+  textCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
   },
-
-  description: { fontSize: 15, lineHeight: 22, color: '#374151' },
+  title: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  description: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#374151',
+  },
+  descriptionMuted: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#9ca3af',
+  },
 });
