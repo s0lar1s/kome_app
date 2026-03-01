@@ -1,6 +1,11 @@
 📱 Kome App
 React Native – Exam Project
 
+Download APK
+https://kome.bg/downloads/kome.apk
+https://drive.google.com/file/d/1pJSfas0YyCU89SYs7kFp8oVR-g0zjjPA/view?usp=sharing
+
+
 🛒 Overview
 Kome App is a retail and loyalty mobile application developed for customers of KOME CBA supermarkets.
 The app centralizes brochures, promotional codes, products, store locations, and a digital loyalty card into one mobile experience.
