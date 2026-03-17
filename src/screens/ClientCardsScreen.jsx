@@ -11,6 +11,7 @@ import {
   Platform,
   Alert,
   StatusBar as RNStatusBar,
+  ScrollView,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Barcode } from "expo-barcode-generator";
@@ -37,7 +38,6 @@ export default function ClientCardsScreen() {
   const [loading, setLoading] = useState(false);
   const [card, setCard] = useState(null);
 
-  // virtual hint from backend
   const [virtualAvailable, setVirtualAvailable] = useState(false);
   const [virtualCcnum, setVirtualCcnum] = useState(null);
 
@@ -52,6 +52,7 @@ export default function ClientCardsScreen() {
   const [showFullNumber, setShowFullNumber] = useState(false);
 
   const [flash, setFlash] = useState(null);
+
   const flashTimerRef = useRef(null);
   const fullTimerRef = useRef(null);
 
@@ -83,7 +84,7 @@ export default function ClientCardsScreen() {
       setVirtualAvailable(!!data?.virtual_available);
       setVirtualCcnum(data?.virtual_ccnum ?? null);
     } catch {
-      showFlash("err", "Проблем със зареждането на картата.");
+      showFlash("err", "Проблем със зареждането на картата.", 2500);
     } finally {
       setLoading(false);
     }
@@ -103,7 +104,7 @@ export default function ClientCardsScreen() {
     if (!permission?.granted) {
       const r = await requestPermission();
       if (!r.granted) {
-        showFlash("err", "Нужен е достъп до камерата (Настройки).", 2500);
+        showFlash("err", "Нужен е достъп до камерата.", 2600);
         Linking.openSettings?.();
         return;
       }
@@ -127,13 +128,11 @@ export default function ClientCardsScreen() {
       setManualOpen(false);
       setManualValue("");
 
-      // refresh hints
       await load();
 
       if (fullTimerRef.current) clearTimeout(fullTimerRef.current);
       setShowFullNumber(true);
-      showFlash("ok", "Картата е добавена. Проверете номера.", 6000);
-
+      showFlash("ok", "Картата е добавена успешно.", 4000);
       fullTimerRef.current = setTimeout(() => setShowFullNumber(false), 4500);
     } catch (e) {
       const msg = e?.response?.data?.error || e?.message || "Неуспешно записване.";
@@ -176,7 +175,7 @@ export default function ClientCardsScreen() {
               await clientCardsApi.removeCard();
               setCard(null);
               await load();
-              showFlash("ok", "Картата беше премахната.");
+              showFlash("ok", "Картата беше премахната.", 2500);
             } catch {
               showFlash("err", "Не успях да премахна картата.", 2500);
             }
@@ -189,7 +188,7 @@ export default function ClientCardsScreen() {
 
   const modalContainerStyle = {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#f8fafc",
     paddingHorizontal: 16,
     paddingTop: (insets?.top ?? 0) + 12,
     paddingBottom: (insets?.bottom ?? 0) + 12,
@@ -202,46 +201,61 @@ export default function ClientCardsScreen() {
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <RNStatusBar barStyle="dark-content" />
 
-      <View style={styles.header}>
-        <Text style={styles.title}>Клиентска карта</Text>
-        <Text style={styles.subtitle}>
-          На касата показваш баркода от телефона и го сканират от екрана.
-        </Text>
-      </View>
-
-      {flash && (
-        <View style={[styles.flash, flash.type === "ok" ? styles.flashOk : styles.flashErr]}>
-          <Text style={styles.flashText}>{flash.text}</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>Клиентска карта</Text>
+          <Text style={styles.subtitle}>
+            Покажи баркода на касата и картата ще бъде сканирана директно от телефона.
+          </Text>
         </View>
-      )}
 
-      <View style={styles.panel}>
+        {flash && (
+          <View style={[styles.flash, flash.type === "ok" ? styles.flashOk : styles.flashErr]}>
+            <Text style={styles.flashText}>{flash.text}</Text>
+          </View>
+        )}
+
         {loading ? (
-          <View style={styles.rowCenter}>
-            <ActivityIndicator />
-            <Text style={styles.muted}> Зареждане…</Text>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#dc2626" />
+            <Text style={styles.loadingText}>Зареждане на данните...</Text>
           </View>
         ) : card ? (
           <>
-            <View style={styles.cardTopRow}>
-              <View>
-                <Text style={styles.kicker}>KOME Club</Text>
-                <Text style={styles.ccnum}>
-                  {showFullNumber ? card.ccnum : maskCard(card.ccnum)}
-                </Text>
+            <View style={styles.digitalCard}>
+              <View style={styles.digitalCardTop}>
+                <View>
+                  <Text style={styles.cardLabel}>KOME Club</Text>
+                  <Text style={styles.cardTitle}>Твоята клиентска карта</Text>
+                </View>
+
+                <View style={styles.activeBadge}>
+                  <Text style={styles.activeBadgeText}>Активна</Text>
+                </View>
               </View>
 
+              <Text style={styles.cardNumber}>
+                {showFullNumber ? card.ccnum : maskCard(card.ccnum)}
+              </Text>
+
               <Pressable
-                style={[styles.iconBtn, saving && { opacity: 0.6 }]}
-                onPress={remove}
-                disabled={saving}
+                style={styles.toggleNumberBtn}
+                onPress={() => setShowFullNumber((v) => !v)}
               >
-                <Text style={styles.iconBtnText}>🗑</Text>
+                <Text style={styles.toggleNumberText}>
+                  {showFullNumber ? "Скрий номера" : "Покажи целия номер"}
+                </Text>
               </Pressable>
             </View>
 
             <View style={styles.barcodeCard}>
-              <Text style={styles.barcodeHint}>Покажи баркода на касата:</Text>
+              <Text style={styles.sectionTitle}>Баркод за сканиране</Text>
+              <Text style={styles.sectionSubtitle}>
+                Покажи този екран на касата, за да бъде сканирана картата.
+              </Text>
 
               <View style={styles.barcodeInner}>
                 <Barcode
@@ -249,7 +263,7 @@ export default function ClientCardsScreen() {
                   options={{
                     format: "CODE128",
                     width: 2,
-                    height: 92,
+                    height: 96,
                     displayValue: false,
                     background: "#FFFFFF",
                     lineColor: "#111827",
@@ -258,42 +272,59 @@ export default function ClientCardsScreen() {
                 />
               </View>
 
-              <Text style={styles.micro}>Подсказка: увеличи яркостта за по-лесно сканиране.</Text>
+              <Text style={styles.micro}>
+                Подсказка: увеличи яркостта на екрана за по-лесно сканиране.
+              </Text>
             </View>
 
-            <View style={styles.btnRow}>
-              <Pressable
-                style={[styles.btnPrimary, saving && { opacity: 0.7 }]}
-                onPress={openScanner}
-                disabled={saving}
-              >
-                <Text style={styles.btnPrimaryText}>Сканирай нова</Text>
-              </Pressable>
+            <View style={styles.actionsCard}>
+              <Text style={styles.sectionTitle}>Управление</Text>
+
+              <View style={styles.btnRow}>
+                <Pressable
+                  style={[styles.btnPrimary, saving && styles.btnDisabled]}
+                  onPress={openScanner}
+                  disabled={saving}
+                >
+                  <Text style={styles.btnPrimaryText}>Сканирай нова</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.btnOutline, saving && styles.btnDisabled]}
+                  onPress={() => setManualOpen(true)}
+                  disabled={saving}
+                >
+                  <Text style={styles.btnOutlineText}>Въведи ръчно</Text>
+                </Pressable>
+              </View>
 
               <Pressable
-                style={[styles.btnOutline, saving && { opacity: 0.7 }]}
-                onPress={() => setManualOpen(true)}
+                style={[styles.btnDangerSoft, saving && styles.btnDisabled]}
+                onPress={remove}
                 disabled={saving}
               >
-                <Text style={styles.btnOutlineText}>Въведи ръчно</Text>
+                <Text style={styles.btnDangerSoftText}>Премахни картата</Text>
               </Pressable>
             </View>
           </>
         ) : (
           <>
-            <View style={styles.emptyTop}>
-              <Text style={styles.kicker}>KOME Club</Text>
+            <View style={styles.emptyCard}>
+              <Text style={styles.cardLabel}>KOME Club</Text>
               <Text style={styles.emptyTitle}>Нямаш добавена карта</Text>
-              <Text style={styles.muted}>
-                Избери удобния за теб вариант — физическа (сканиране/ръчно) или виртуална карта.
+              <Text style={styles.emptyText}>
+                Добави физическа или виртуална карта и я използвай удобно директно от телефона.
               </Text>
             </View>
 
-            {/* ВИНАГИ: физическа карта */}
             <View style={styles.group}>
               <Text style={styles.groupTitle}>Физическа карта</Text>
+              <Text style={styles.groupText}>
+                Ако вече имаш издадена карта, можеш да я добавиш бързо чрез сканиране или ръчно въвеждане.
+              </Text>
+
               <Pressable
-                style={[styles.btnPrimaryWide, saving && { opacity: 0.7 }]}
+                style={[styles.btnPrimaryWide, saving && styles.btnDisabled]}
                 onPress={openScanner}
                 disabled={saving}
               >
@@ -302,7 +333,7 @@ export default function ClientCardsScreen() {
 
               <View style={styles.btnRow}>
                 <Pressable
-                  style={[styles.btnOutline, { flex: 1 }, saving && { opacity: 0.7 }]}
+                  style={[styles.btnOutline, styles.flexBtn, saving && styles.btnDisabled]}
                   onPress={() => setManualOpen(true)}
                   disabled={saving}
                 >
@@ -310,7 +341,7 @@ export default function ClientCardsScreen() {
                 </Pressable>
 
                 <Pressable
-                  style={[styles.btnGhost, { flex: 1 }, saving && { opacity: 0.7 }]}
+                  style={[styles.btnGhost, styles.flexBtn, saving && styles.btnDisabled]}
                   onPress={goHowToGet}
                   disabled={saving}
                 >
@@ -319,28 +350,31 @@ export default function ClientCardsScreen() {
               </View>
             </View>
 
-            {/* ВИНАГИ: виртуална карта */}
             <View style={styles.group}>
               <Text style={styles.groupTitle}>Виртуална карта</Text>
 
               {virtualAvailable && virtualCcnum ? (
-                <Pressable
-                  style={[styles.btnPrimaryWide, saving && { opacity: 0.7 }]}
-                  onPress={addVirtualNow}
-                  disabled={saving}
-                >
-                  <Text style={styles.btnPrimaryText}>Добави виртуалната ми карта</Text>
-                </Pressable>
-              ) : (
-                <View style={styles.infoLine}>
-                  <Text style={styles.muted}>
-                    Нямаш създадена виртуална карта. Можеш да я направиш за минута.
+                <>
+                  <Text style={styles.groupText}>
+                    Имаш налична виртуална карта, която можеш да добавиш веднага в приложението.
                   </Text>
-                </View>
+
+                  <Pressable
+                    style={[styles.btnPrimaryWide, saving && styles.btnDisabled]}
+                    onPress={addVirtualNow}
+                    disabled={saving}
+                  >
+                    <Text style={styles.btnPrimaryText}>Добави виртуалната ми карта</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <Text style={styles.groupText}>
+                  Нямаш създадена виртуална карта. Можеш да я направиш бързо и да я използваш на касата.
+                </Text>
               )}
 
               <Pressable
-                style={[styles.btnOutlineWide, saving && { opacity: 0.7 }]}
+                style={[styles.btnOutlineWide, saving && styles.btnDisabled]}
                 onPress={goVirtual}
                 disabled={saving}
               >
@@ -348,14 +382,13 @@ export default function ClientCardsScreen() {
               </Pressable>
 
               <Text style={styles.micro}>
-                Виртуалната карта се показва като баркод в телефона и се използва на касата.
+                Виртуалната карта се показва като баркод на телефона и се използва по същия начин на касата.
               </Text>
             </View>
           </>
         )}
-      </View>
+      </ScrollView>
 
-      {/* CAMERA MODAL */}
       <Modal
         visible={scanOpen}
         animationType="slide"
@@ -364,11 +397,15 @@ export default function ClientCardsScreen() {
       >
         <SafeAreaView style={modalContainerStyle} edges={[]}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Сканиране</Text>
+            <Text style={styles.modalTitle}>Сканиране на карта</Text>
             <Pressable style={styles.pill} onPress={closeScanner}>
               <Text style={styles.pillText}>Затвори</Text>
             </Pressable>
           </View>
+
+          <Text style={styles.modalInfo}>
+            Насочи камерата към баркода. Картата ще бъде записана автоматично.
+          </Text>
 
           <View style={styles.cameraBox}>
             <CameraView
@@ -379,19 +416,15 @@ export default function ClientCardsScreen() {
           </View>
 
           {saving ? (
-            <View style={[styles.rowCenter, { marginTop: 12 }]}>
+            <View style={[styles.rowCenter, { marginTop: 14 }]}>
               <ActivityIndicator />
-              <Text style={styles.muted}> Записвам…</Text>
+              <Text style={styles.muted}> Записвам...</Text>
             </View>
-          ) : (
-            <Text style={[styles.muted, { marginTop: 12 }]}>
-              Насочи камерата към баркода — записът става автоматично.
-            </Text>
-          )}
+          ) : null}
 
           {__DEV__ && (
             <Pressable
-              style={[styles.btnOutline, { marginTop: 12 }]}
+              style={[styles.btnOutlineWide, { marginTop: 14 }]}
               onPress={() => onBarcodeScanned({ data: "1234567890123" })}
               disabled={saving}
             >
@@ -401,7 +434,6 @@ export default function ClientCardsScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* MANUAL MODAL */}
       <Modal
         visible={manualOpen}
         animationType="slide"
@@ -410,7 +442,7 @@ export default function ClientCardsScreen() {
       >
         <SafeAreaView style={modalContainerStyle} edges={[]}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Въведи номер</Text>
+            <Text style={styles.modalTitle}>Ръчно въвеждане</Text>
             <Pressable style={styles.pill} onPress={() => setManualOpen(false)}>
               <Text style={styles.pillText}>Затвори</Text>
             </Pressable>
@@ -418,6 +450,9 @@ export default function ClientCardsScreen() {
 
           <View style={styles.formCard}>
             <Text style={styles.label}>Номер на карта</Text>
+            <Text style={styles.formHint}>
+              Въведи номера без интервали и допълнителни символи.
+            </Text>
 
             <TextInput
               style={styles.input}
@@ -425,10 +460,11 @@ export default function ClientCardsScreen() {
               keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
               value={manualValue}
               onChangeText={setManualValue}
+              placeholderTextColor="#94a3b8"
             />
 
             <Pressable
-              style={[styles.btnPrimaryWide, { marginTop: 12 }, saving && { opacity: 0.7 }]}
+              style={[styles.btnPrimaryWide, { marginTop: 14 }, saving && styles.btnDisabled]}
               onPress={() => {
                 const val = normalizeCcnum(manualValue);
                 if (!val || val.length < 6) {
@@ -439,7 +475,7 @@ export default function ClientCardsScreen() {
               }}
               disabled={saving}
             >
-              <Text style={styles.btnPrimaryText}>{saving ? "Записвам…" : "Запази"}</Text>
+              <Text style={styles.btnPrimaryText}>{saving ? "Записвам..." : "Запази"}</Text>
             </Pressable>
           </View>
         </SafeAreaView>
@@ -449,136 +485,395 @@ export default function ClientCardsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f4f6fb", padding: 16 },
+  safe: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
 
-  header: { marginBottom: 10 },
-  title: { fontSize: 22, fontWeight: "900", color: "#111827" },
-  subtitle: { marginTop: 6, fontSize: 13, color: "#6b7280", lineHeight: 18 },
-
-  flash: { borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12, borderWidth: 1 },
-  flashOk: { backgroundColor: "#ECFDF5", borderColor: "#10B981" },
-  flashErr: { backgroundColor: "#FEF2F2", borderColor: "#EF4444" },
-  flashText: { fontSize: 13, fontWeight: "800", color: "#111827" },
-
-  panel: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
+  scrollContent: {
     padding: 16,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 22,
-    elevation: 4,
+    paddingBottom: 28,
   },
 
-  rowCenter: { flexDirection: "row", alignItems: "center" },
-  muted: { fontSize: 13, color: "#6b7280" },
-
-  kicker: { fontSize: 12, fontWeight: "900", color: "#6b7280" },
-  ccnum: { marginTop: 4, fontSize: 19, fontWeight: "900", color: "#111827" },
-
-  cardTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
-
-  iconBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#fff",
+  header: {
+    marginBottom: 14,
   },
-  iconBtnText: { fontSize: 18 },
 
-  barcodeCard: {
-    marginTop: 14,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+  title: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+
+  subtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#64748b",
+  },
+
+  flash: {
     borderRadius: 16,
-    backgroundColor: "#fafafa",
-    padding: 12,
-  },
-  barcodeHint: { fontSize: 12, color: "#374151", marginBottom: 10, fontWeight: "700" },
-  barcodeInner: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 14,
-    paddingVertical: 10,
-  },
-  micro: { marginTop: 8, fontSize: 12, color: "#6b7280", lineHeight: 18 },
-
-  emptyTop: { gap: 6, marginBottom: 6 },
-  emptyTitle: { fontSize: 16, fontWeight: "900", color: "#111827" },
-
-  group: {
-    marginTop: 12,
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#fafafa",
-    gap: 10,
-  },
-  groupTitle: { fontSize: 13, fontWeight: "900", color: "#111827" },
-  infoLine: { paddingVertical: 2 },
-
-  btnRow: { flexDirection: "row", gap: 10 },
-
-  btnPrimary: {
-    backgroundColor: "#111827",
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 14,
+    marginBottom: 14,
+    borderWidth: 1,
   },
-  btnPrimaryWide: {
+
+  flashOk: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#34d399",
+  },
+
+  flashErr: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#f87171",
+  },
+
+  flashText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  loadingCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    paddingVertical: 28,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+
+  digitalCard: {
+    backgroundColor: "#111827",
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
+  },
+
+  digitalCardTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  cardLabel: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#cbd5e1",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+
+  cardTitle: {
+    marginTop: 6,
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+
+  activeBadge: {
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+
+  activeBadgeText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+
+  cardNumber: {
+    marginTop: 22,
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: 0.4,
+  },
+
+  toggleNumberBtn: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+
+  toggleNumberText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#e2e8f0",
+  },
+
+  barcodeCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+
+  sectionSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#64748b",
+  },
+
+  barcodeInner: {
+    marginTop: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 18,
+    paddingVertical: 14,
+  },
+
+  micro: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#64748b",
+  },
+
+  actionsCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+
+  emptyCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+
+  emptyTitle: {
+    marginTop: 6,
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+
+  emptyText: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#64748b",
+  },
+
+  group: {
+    marginTop: 14,
+    padding: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    gap: 12,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+
+  groupTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+
+  groupText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#64748b",
+  },
+
+  rowCenter: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  muted: {
+    fontSize: 13,
+    color: "#64748b",
+  },
+
+  btnRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 2,
+  },
+
+  flexBtn: {
+    flex: 1,
+  },
+
+  btnPrimary: {
+    flex: 1,
     backgroundColor: "#111827",
     paddingVertical: 13,
     paddingHorizontal: 14,
-    borderRadius: 14,
-    alignItems: "center",
-  },
-  btnPrimaryText: { color: "#fff", fontWeight: "900", fontSize: 13 },
-
-  btnOutline: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#fff",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
+
+  btnPrimaryWide: {
+    backgroundColor: "#111827",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+
+  btnPrimaryText: {
+    color: "#ffffff",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+
+  btnOutline: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   btnOutlineWide: {
     borderWidth: 1,
     borderColor: "#d1d5db",
-    backgroundColor: "#fff",
-    paddingVertical: 13,
+    backgroundColor: "#ffffff",
+    paddingVertical: 14,
     paddingHorizontal: 14,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: "center",
   },
-  btnOutlineText: { color: "#111827", fontWeight: "900", fontSize: 13 },
+
+  btnOutlineText: {
+    color: "#111827",
+    fontWeight: "900",
+    fontSize: 14,
+  },
 
   btnGhost: {
     borderWidth: 1,
     borderColor: "#e5e7eb",
-    backgroundColor: "#f3f4f6",
-    paddingVertical: 12,
+    backgroundColor: "#f8fafc",
+    paddingVertical: 13,
     paddingHorizontal: 14,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
-  btnGhostText: { color: "#111827", fontWeight: "900", fontSize: 13 },
 
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 },
-  modalTitle: { fontSize: 16, fontWeight: "900", color: "#111827" },
+  btnGhostText: {
+    color: "#111827",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+
+  btnDangerSoft: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    backgroundColor: "#fef2f2",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+
+  btnDangerSoftText: {
+    color: "#b91c1c",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+
+  btnDisabled: {
+    opacity: 0.7,
+  },
+
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 12,
+  },
+
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#111827",
+  },
+
+  modalInfo: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#64748b",
+    marginBottom: 14,
+  },
 
   pill: {
     borderWidth: 1,
@@ -586,44 +881,65 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: "#fff",
+    backgroundColor: "#ffffff",
   },
-  pillText: { fontSize: 13, fontWeight: "900", color: "#111827" },
+
+  pillText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#111827",
+  },
 
   cameraBox: {
-    height: 420,
-    borderRadius: 18,
+    height: 430,
+    borderRadius: 22,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "#e5e7eb",
     backgroundColor: "#000",
     position: "relative",
   },
+
   scanFrame: {
     position: "absolute",
-    left: 22,
-    right: 22,
-    top: 160,
+    left: 24,
+    right: 24,
+    top: 155,
     height: 120,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.95)",
+    borderColor: "rgba(255,255,255,0.96)",
   },
 
   formCard: {
-    backgroundColor: "#fff",
-    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
   },
-  label: { fontSize: 13, fontWeight: "900", color: "#111827", marginBottom: 8 },
+
+  label: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#111827",
+    marginBottom: 6,
+  },
+
+  formHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#64748b",
+    marginBottom: 12,
+  },
+
   input: {
     borderWidth: 1,
     borderColor: "#d1d5db",
-    borderRadius: 14,
-    padding: 12,
-    fontSize: 14,
-    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 13,
+    fontSize: 15,
+    backgroundColor: "#ffffff",
+    color: "#0f172a",
   },
 });
