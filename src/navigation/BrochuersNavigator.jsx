@@ -7,7 +7,7 @@ export default function BrochuresNavigator() {
     const Stack = createNativeStackNavigator();
 
     return (
-        <Stack.Navigator>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen 
                 name="BrochuresList" 
                 component={BrochuresListScreen} 
@@ -20,6 +20,7 @@ export default function BrochuresNavigator() {
                 name="Brochures" 
                 component={BrochuresScreen} 
                 options={{
+                    headerShown: true,
                     title: "",
                 }}
             />

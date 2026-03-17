@@ -11,18 +11,18 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { shoppingListApi } from '../Api';
 import { useAuth } from '../contexts/auth/useAuth.js';
+import TopBrandBar from '../components/TopBrandBar';
 
 function norm(v) {
   return String(v ?? '').trim();
 }
 
 const LS_KEY = 'shopping_list_local_v1';
-
-// ⬇️ СМЕНИ АКО ПРИ ТЕБ Е ДРУГО
 const ACCESS_TOKEN_KEY = 'accessToken';
 
 function isUnauthorized(err) {
@@ -52,15 +52,12 @@ function makeLocalId() {
   return `local_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 }
 
-export default function ShoppingListScreen({ navigation }) {
+export default function ShoppingListScreen() {
   const auth = useAuth?.() ?? {};
   const accessTokenFromContext = auth?.accessToken;
   const user = auth?.user;
 
-  // fallback token ако контекстът не го дава
   const [tokenFallback, setTokenFallback] = useState(null);
-
-  // реалният токен, който ще използваме
   const token = accessTokenFromContext || tokenFallback;
 
   const [items, setItems] = useState([]);
@@ -75,10 +72,8 @@ export default function ShoppingListScreen({ navigation }) {
 
   const [useLocal, setUseLocal] = useState(false);
 
-  // за да не правим двойни load-и при първо отваряне
   const didInit = useRef(false);
 
-  // взимаме токена от AsyncStorage (fallback)
   const loadTokenFallback = async () => {
     try {
       const t = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
@@ -110,6 +105,16 @@ export default function ShoppingListScreen({ navigation }) {
     return arr;
   }, [items]);
 
+  const activeCount = useMemo(
+    () => sortedItems.filter((x) => Number(x?.is_done) !== 1).length,
+    [sortedItems]
+  );
+
+  const doneCount = useMemo(
+    () => sortedItems.filter((x) => Number(x?.is_done) === 1).length,
+    [sortedItems]
+  );
+
   const setItemsAndPersistLocal = (updater) => {
     setItems((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -121,7 +126,6 @@ export default function ShoppingListScreen({ navigation }) {
   const load = async () => {
     setRefreshing(true);
 
-    // ✅ ако имаме токен -> ВИНАГИ пробваме API (дори useLocal да е true)
     if (token) {
       try {
         const res = await shoppingListApi.getAll();
@@ -130,7 +134,6 @@ export default function ShoppingListScreen({ navigation }) {
         return;
       } catch (e) {
         if (isUnauthorized(e)) {
-          // токенът е невалиден или няма права -> local fallback
           const local = await readLocalList();
           setItems(local);
           setUseLocal(true);
@@ -144,14 +147,12 @@ export default function ShoppingListScreen({ navigation }) {
       }
     }
 
-    // няма токен -> local
     const local = await readLocalList();
     setItems(local);
     setUseLocal(true);
     setRefreshing(false);
   };
 
-  // init: вземи fallback token и зареди
   useEffect(() => {
     (async () => {
       if (didInit.current) return;
@@ -163,14 +164,11 @@ export default function ShoppingListScreen({ navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // когато се смени контекстния токен/потребител -> зареждаме пак
   useEffect(() => {
-    // ако контекстът вече дава токен, не ни трябва fallback
     if (accessTokenFromContext) setTokenFallback(null);
 
-    // при логин/смяна на user -> опитай API
     (async () => {
-      await loadTokenFallback(); // в случай че контекстът не го дава
+      await loadTokenFallback();
       await load();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -183,7 +181,6 @@ export default function ShoppingListScreen({ navigation }) {
     Keyboard.dismiss();
     setAdding(true);
 
-    // LOCAL MODE
     if (!token) {
       const created = {
         id: makeLocalId(),
@@ -198,7 +195,6 @@ export default function ShoppingListScreen({ navigation }) {
       return;
     }
 
-    // API MODE
     try {
       const res = await shoppingListApi.create({ title });
       const created = res?.data;
@@ -213,7 +209,6 @@ export default function ShoppingListScreen({ navigation }) {
       setNewTitle('');
     } catch (e) {
       if (isUnauthorized(e)) {
-        // fallback local
         const created = {
           id: makeLocalId(),
           title,
@@ -239,7 +234,6 @@ export default function ShoppingListScreen({ navigation }) {
 
     const nextDone = Number(item?.is_done) ? 0 : 1;
 
-    // LOCAL
     if (!token) {
       setItemsAndPersistLocal((prev) =>
         (Array.isArray(prev) ? prev : []).map((x) =>
@@ -249,7 +243,6 @@ export default function ShoppingListScreen({ navigation }) {
       return;
     }
 
-    // optimistic UI
     setItems((prev) =>
       (Array.isArray(prev) ? prev : []).map((x) =>
         x?.id === id ? { ...x, is_done: nextDone } : x
@@ -266,7 +259,6 @@ export default function ShoppingListScreen({ navigation }) {
         return;
       }
 
-      // rollback
       setItems((prev) =>
         (Array.isArray(prev) ? prev : []).map((x) =>
           x?.id === id ? { ...x, is_done: Number(item?.is_done) ? 1 : 0 } : x
@@ -287,7 +279,6 @@ export default function ShoppingListScreen({ navigation }) {
     const id = item?.id;
     if (!id) return;
 
-    // LOCAL
     if (!token) {
       setItemsAndPersistLocal((prev) =>
         Array.isArray(prev) ? prev.filter((x) => x?.id !== id) : prev
@@ -329,7 +320,6 @@ export default function ShoppingListScreen({ navigation }) {
 
     const id = editItem.id;
 
-    // LOCAL
     if (!token) {
       setItemsAndPersistLocal((p) =>
         (Array.isArray(p) ? p : []).map((x) => (x?.id === id ? { ...x, title } : x))
@@ -399,63 +389,88 @@ export default function ShoppingListScreen({ navigation }) {
   const showLocal = useLocal || !token;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.pageTitle}>Списък за пазаруване</Text>
+    <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
+      {/* <TopBrandBar /> */}
 
-        <View style={styles.addRow}>
-          <TextInput
-            value={newTitle}
-            onChangeText={setNewTitle}
-            placeholder="Добави продукт…"
-            placeholderTextColor="#94a3b8"
-            style={styles.input}
-            returnKeyType="done"
-            onSubmitEditing={onAdd}
-          />
-          <Pressable
-            onPress={onAdd}
-            disabled={adding || !norm(newTitle)}
-            style={[styles.addBtn, (adding || !norm(newTitle)) && styles.addBtnDisabled]}
-          >
-            <Text style={styles.addBtnText}>{adding ? '...' : 'Добави'}</Text>
-          </Pressable>
+      <View style={styles.container}>
+        <View style={styles.headerCard}>
+          <Text style={styles.pageTitle}>Списък за пазаруване</Text>
+          {/* <Text style={styles.pageSubtitle}>
+            Добавяй продукти, отбелязвай купените и поддържай списъка си подреден.
+          </Text> */}
+
+          <View style={styles.statsRow}>
+            <View style={styles.statPill}>
+              <Text style={styles.statPillText}>{activeCount} активни</Text>
+            </View>
+            <View style={[styles.statPill, styles.statPillSoft]}>
+              <Text style={styles.statPillTextSoft}>{doneCount} купени</Text>
+            </View>
+          </View>
+
+          <View style={styles.addCard}>
+            <TextInput
+              value={newTitle}
+              onChangeText={setNewTitle}
+              placeholder="Добави продукт…"
+              placeholderTextColor="#94a3b8"
+              style={styles.input}
+              returnKeyType="done"
+              onSubmitEditing={onAdd}
+            />
+            <Pressable
+              onPress={onAdd}
+              disabled={adding || !norm(newTitle)}
+              style={[styles.addBtn, (adding || !norm(newTitle)) && styles.addBtnDisabled]}
+            >
+              <Text style={styles.addBtnText}>{adding ? '...' : 'Добави'}</Text>
+            </Pressable>
+          </View>
+
+          {showLocal ? (
+            <View style={styles.localBanner}>
+              <Text style={styles.localBannerTitle}>Локален режим</Text>
+              <Text style={styles.localBannerText}>
+                Списъкът в момента се пази само на устройството. При логин ще се използва базата.
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.hint}>
+              Натисни квадратчето, за да отбележиш продукт като купен.
+            </Text>
+          )}
         </View>
 
-        <Text style={styles.hint}>
-          ✓: отметни • ✎: редакция • ✕: изтрий
-          {showLocal ? ' • Локален режим' : ''}
-        </Text>
-
-        {showLocal ? (
-          <View style={styles.localBanner}>
-            <Text style={styles.localBannerText}>
-              В момента списъкът се пази локално (без логин). При логин ще се използва базата.
-            </Text>
-          </View>
-        ) : null}
+        <FlatList
+          data={sortedItems}
+          keyExtractor={(x) => String(x?.id)}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} />}
+          ListEmptyComponent={
+            !refreshing ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyTitle}>Няма добавени продукти</Text>
+                <Text style={styles.emptyText}>Добави първия продукт от полето горе.</Text>
+              </View>
+            ) : null
+          }
+          showsVerticalScrollIndicator={false}
+        />
       </View>
 
-      <FlatList
-        data={sortedItems}
-        keyExtractor={(x) => String(x?.id)}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} />}
-        ListEmptyComponent={
-          !refreshing ? (
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>Няма добавени продукти</Text>
-              <Text style={styles.emptyText}>Добави първия продукт от полето горе.</Text>
-            </View>
-          ) : null
-        }
-      />
-
-      <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
+      <Modal
+        visible={editOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditOpen(false)}
+      >
         <Pressable style={styles.modalOverlay} onPress={() => setEditOpen(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Редакция</Text>
+            <Text style={styles.modalTitle}>Редакция на запис</Text>
+            <Text style={styles.modalSubtitle}>
+              Промени името на продукта в списъка.
+            </Text>
 
             <TextInput
               value={editTitle}
@@ -479,180 +494,344 @@ export default function ShoppingListScreen({ navigation }) {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f8f8' },
+  safe: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
 
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 10,
-    gap: 10,
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+
+  headerCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 10,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 16,
   },
 
   pageTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '900',
-    color: '#111827',
+    color: '#0f172a',
   },
 
-  addRow: { flexDirection: 'row', gap: 10 },
+  pageSubtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#64748b',
+  },
+
+  statsRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  statPill: {
+    borderRadius: 999,
+    backgroundColor: '#111827',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+
+  statPillSoft: {
+    backgroundColor: '#eef2f7',
+  },
+
+  statPillText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  statPillTextSoft: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  addCard: {
+    marginTop: 14,
+    flexDirection: 'row',
+    gap: 10,
+  },
 
   input: {
     flex: 1,
-    height: 44,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
+    height: 48,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    fontSize: 14,
+    borderColor: '#dbe3ee',
+    fontSize: 15,
     color: '#111827',
   },
 
   addBtn: {
-    height: 44,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6366f1',
+    backgroundColor: '#111827',
   },
-  addBtnDisabled: { opacity: 0.5 },
-  addBtnText: { color: '#fff', fontWeight: '900', fontSize: 13 },
 
-  hint: { fontSize: 12, color: '#64748b', fontWeight: '700' },
+  addBtnDisabled: {
+    opacity: 0.45,
+  },
+
+  addBtnText: {
+    color: '#ffffff',
+    fontWeight: '900',
+    fontSize: 14,
+  },
+
+  hint: {
+    marginTop: 12,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#64748b',
+    fontWeight: '700',
+  },
 
   localBanner: {
-    backgroundColor: '#fff',
+    marginTop: 12,
+    backgroundColor: '#fff7ed',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 14,
-    padding: 10,
-  },
-  localBannerText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0f172a',
+    borderColor: '#fdba74',
+    borderRadius: 16,
+    padding: 12,
   },
 
-  listContent: { paddingHorizontal: 16, paddingBottom: 24, gap: 10 },
+  localBannerTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#9a3412',
+    marginBottom: 4,
+  },
+
+  localBannerText: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#9a3412',
+  },
+
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    gap: 10,
+  },
 
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 16,
-    paddingVertical: 10,
+    borderColor: '#e2e8f0',
+    borderRadius: 18,
+    paddingVertical: 12,
     paddingHorizontal: 12,
   },
-  rowDone: { opacity: 0.7 },
 
-  check: { padding: 2 },
+  rowDone: {
+    opacity: 0.72,
+    backgroundColor: '#f8fafc',
+  },
+
+  check: {
+    padding: 2,
+  },
+
   checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
+    width: 24,
+    height: 24,
+    borderRadius: 8,
     borderWidth: 2,
     borderColor: '#cbd5e1',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
   },
-  checkboxOn: { borderColor: '#22c55e' },
-  checkMark: { fontWeight: '900', color: '#16a34a', marginTop: -1 },
 
-  rowBody: { flex: 1 },
-  rowTitle: { fontSize: 14, color: '#111827', fontWeight: '800' },
-  rowTitleDone: { textDecorationLine: 'line-through', color: '#64748b' },
+  checkboxOn: {
+    borderColor: '#22c55e',
+    backgroundColor: '#ecfdf5',
+  },
 
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  checkMark: {
+    fontWeight: '900',
+    color: '#16a34a',
+    marginTop: -1,
+  },
+
+  rowBody: {
+    flex: 1,
+  },
+
+  rowTitle: {
+    fontSize: 15,
+    color: '#111827',
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+
+  rowTitleDone: {
+    textDecorationLine: 'line-through',
+    color: '#64748b',
+  },
+
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
 
   editBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#fff',
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
   },
-  editText: { color: '#0f172a', fontWeight: '900', fontSize: 14 },
+
+  editText: {
+    color: '#0f172a',
+    fontWeight: '900',
+    fontSize: 15,
+  },
 
   delBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#fee2e2',
-    backgroundColor: '#fff',
+    borderColor: '#fecaca',
+    backgroundColor: '#fff5f5',
   },
-  delText: { color: '#ef4444', fontWeight: '900', fontSize: 14 },
+
+  delText: {
+    color: '#ef4444',
+    fontWeight: '900',
+    fontSize: 15,
+  },
 
   empty: {
-    marginTop: 18,
-    backgroundColor: '#fff',
+    marginTop: 14,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 16,
-    padding: 14,
+    borderColor: '#e2e8f0',
+    borderRadius: 18,
+    padding: 16,
   },
-  emptyTitle: { fontSize: 15, fontWeight: '900', color: '#111827', marginBottom: 4 },
-  emptyText: { fontSize: 13, color: '#64748b', fontWeight: '700' },
+
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#111827',
+    marginBottom: 4,
+  },
+
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#64748b',
+    fontWeight: '700',
+  },
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
-    padding: 16,
+    backgroundColor: 'rgba(15, 23, 42, 0.36)',
+    padding: 18,
     justifyContent: 'center',
   },
+
   modalCard: {
-    borderRadius: 18,
-    backgroundColor: '#fff',
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 14,
-    gap: 10,
+    borderColor: '#e2e8f0',
+    padding: 16,
   },
-  modalTitle: { fontSize: 16, fontWeight: '900', color: '#111827' },
-  modalInput: {
-    height: 44,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    fontSize: 14,
+
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '900',
     color: '#111827',
   },
-  modalActions: { flexDirection: 'row', gap: 10, justifyContent: 'flex-end' },
-  modalBtnGhost: {
-    height: 42,
+
+  modalSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#64748b',
+    marginBottom: 12,
+  },
+
+  modalInput: {
+    height: 48,
+    borderRadius: 16,
     paddingHorizontal: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#dbe3ee',
+    fontSize: 15,
+    color: '#111827',
+  },
+
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'flex-end',
+    marginTop: 14,
+  },
+
+  modalBtnGhost: {
+    height: 44,
+    paddingHorizontal: 16,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#fff',
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
   },
-  modalBtnGhostText: { color: '#111827', fontWeight: '900' },
+
+  modalBtnGhostText: {
+    color: '#111827',
+    fontWeight: '900',
+  },
+
   modalBtnPrimary: {
-    height: 42,
-    paddingHorizontal: 14,
+    height: 44,
+    paddingHorizontal: 16,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6366f1',
+    backgroundColor: '#111827',
   },
-  modalBtnPrimaryText: { color: '#fff', fontWeight: '900' },
+
+  modalBtnPrimaryText: {
+    color: '#ffffff',
+    fontWeight: '900',
+  },
 });

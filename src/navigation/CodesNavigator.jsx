@@ -6,17 +6,22 @@ const Stack = createNativeStackNavigator();
 
 export default function CodesNavigator() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen
         name="Codes"
         component={PromoCodesListScreen}
-        options={{ title: "Промо кодове" }}
+        options={{ 
+          title: "Промо кодове" 
+        }}
       />
 
       <Stack.Screen
         name="PromoCodeDetails"
         component={PromoCodeDetailsScreen}
-        options={{ title: "" }}
+        options={{ 
+          headerShown: true,
+          title: "" 
+        }}
       />
     </Stack.Navigator>
   );

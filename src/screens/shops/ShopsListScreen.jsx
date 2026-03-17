@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
+  FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
-  FlatList,
   Pressable,
-  RefreshControl,
   TextInput,
   Linking,
   Platform,
-  Alert,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -63,10 +63,11 @@ export default function ShopsListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState(null);
+  const [mapExpanded, setMapExpanded] = useState(false);
 
-  // USER LOCATION
   const [userCoords, setUserCoords] = useState(null);
   const [locDenied, setLocDenied] = useState(false);
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   const activeShops = useMemo(() => {
     if (!Array.isArray(shops)) return [];
@@ -96,7 +97,6 @@ export default function ShopsListScreen() {
   }, [filteredShops]);
 
   const initialRegion = useMemo(() => {
-    // 0) ако имаме user coords -> старт там (по-приятно)
     if (userCoords) {
       return {
         ...userCoords,
@@ -105,7 +105,6 @@ export default function ShopsListScreen() {
       };
     }
 
-    // 1) ако има координати на магазини
     if (shopsWithCoords.length > 0) {
       const { latitude, longitude } = shopsWithCoords[0].coords;
       return {
@@ -116,7 +115,6 @@ export default function ShopsListScreen() {
       };
     }
 
-    // 2) fallback (София)
     return {
       latitude: 42.6977,
       longitude: 23.3219,
@@ -137,13 +135,25 @@ export default function ShopsListScreen() {
     }
   };
 
-  // get user location once
-  const getUserLocation = async () => {
+  const requestAndGetUserLocation = async (shouldAnimate = true) => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      setGettingLocation(true);
+
+      const currentPermission = await Location.getForegroundPermissionsAsync();
+      let status = currentPermission.status;
+
+      if (status !== 'granted') {
+        const requested = await Location.requestForegroundPermissionsAsync();
+        status = requested.status;
+      }
+
       if (status !== 'granted') {
         setLocDenied(true);
-        return;
+        Alert.alert(
+          'Локацията е изключена',
+          'Разреши достъп до Location, за да покажем текущото ти местоположение.'
+        );
+        return null;
       }
 
       setLocDenied(false);
@@ -159,25 +169,29 @@ export default function ShopsListScreen() {
 
       setUserCoords(coords);
 
-      // ако картата е заредена, центрирай към него (само първия път)
-      if (mapRef.current) {
+      if (shouldAnimate && mapRef.current) {
         mapRef.current.animateToRegion(
           {
             ...coords,
-            latitudeDelta: 0.12,
-            longitudeDelta: 0.12,
+            latitudeDelta: 0.012,
+            longitudeDelta: 0.012,
           },
           350
         );
       }
+
+      return coords;
     } catch (e) {
-      // тиха грешка
+      Alert.alert('Грешка', 'Не успях да взема текущата локация.');
+      return null;
+    } finally {
+      setGettingLocation(false);
     }
   };
 
   useEffect(() => {
     fetchData();
-    getUserLocation();
+    requestAndGetUserLocation(false);
   }, []);
 
   const openShopDetails = (item) => {
@@ -201,20 +215,7 @@ export default function ShopsListScreen() {
   };
 
   const focusOnMe = async () => {
-    if (!userCoords) {
-      await getUserLocation();
-      return;
-    }
-    if (!mapRef.current) return;
-
-    mapRef.current.animateToRegion(
-      {
-        ...userCoords,
-        latitudeDelta: 0.012,
-        longitudeDelta: 0.012,
-      },
-      350
-    );
+    await requestAndGetUserLocation(true);
   };
 
   const renderItem = ({ item }) => {
@@ -230,12 +231,12 @@ export default function ShopsListScreen() {
 
     return (
       <View style={[styles.card, isSelected && styles.cardSelected]}>
-        <Pressable onPress={() => focusOnShop(item)} style={{ gap: 6 }}>
+        <Pressable onPress={() => focusOnShop(item)} style={styles.cardContent}>
           <View style={styles.headerRow}>
-            <Text style={styles.title} numberOfLines={1}>
+            <Text style={styles.title} numberOfLines={2}>
               {title}
             </Text>
-            {!!coords && <Text style={styles.pinBadge}>📍</Text>}
+            {!!coords ? <Text style={styles.pinBadge}>📍</Text> : null}
           </View>
 
           {!!address && (
@@ -258,15 +259,19 @@ export default function ShopsListScreen() {
         </Pressable>
 
         <View style={styles.actionsRow}>
+          <Pressable onPress={() => focusOnShop(item)} style={styles.btnGhost}>
+            <Text style={styles.btnGhostText}>Покажи на картата</Text>
+          </Pressable>
+
           <Pressable onPress={() => openShopDetails(item)} style={styles.btnPrimary}>
-            <Text style={styles.btnPrimaryText}>Виж детайли</Text>
+            <Text style={styles.btnPrimaryText}>Детайли</Text>
           </Pressable>
 
           <Pressable
             onPress={() => openExternalMaps({ title, address, coords })}
-            style={styles.btnGhost}
+            style={styles.btnOutline}
           >
-            <Text style={styles.btnGhostText}>Навигация</Text>
+            <Text style={styles.btnOutlineText}>Навигация</Text>
           </Pressable>
         </View>
       </View>
@@ -274,92 +279,94 @@ export default function ShopsListScreen() {
   };
 
   const ListHeader = (
-    <View style={styles.searchWrap}>
-      <Text style={styles.pageTitle}>Коме магазини</Text>
+    <View style={styles.headerBlock}>
+      <View style={styles.searchWrap}>
+        <View style={styles.searchBox}>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Търси магазин, град или адрес…"
+            placeholderTextColor="#94a3b8"
+            style={styles.searchInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
 
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Търси по град, магазин, адрес…"
-        placeholderTextColor="#94a3b8"
-        style={styles.searchInput}
-        autoCapitalize="none"
-        autoCorrect={false}
-        clearButtonMode="while-editing"
-      />
+          {query ? (
+            <Pressable onPress={() => setQuery('')} hitSlop={10} style={styles.clearBtnWrap}>
+              <Text style={styles.clearBtn}>✕</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
 
-      {!!q && (
-        <Text style={styles.resultHint}>
-          Резултати: {filteredShops.length} / {activeShops.length}
-        </Text>
-      )}
+      <View style={styles.mapOuter}>
+        <View style={[styles.mapCard, { height: mapExpanded ? 300 : 165 }]}>
+          <MapView
+            ref={mapRef}
+            style={StyleSheet.absoluteFill}
+            provider={PROVIDER_GOOGLE}
+            initialRegion={initialRegion}
+            showsUserLocation={!!userCoords}
+          >
+            {shopsWithCoords.map(({ shop, coords }) => {
+              const city = norm(shop?.city);
+              const store = norm(shop?.store);
+              const title = [city, store].filter(Boolean).join(' • ') || 'Обект';
+
+              return (
+                <Marker
+                  key={String(shop?.id)}
+                  coordinate={coords}
+                  title={title}
+                  description={norm(shop?.address)}
+                  onPress={() => setSelectedId(shop?.id)}
+                />
+              );
+            })}
+          </MapView>
+
+          <Pressable onPress={focusOnMe} style={styles.myLocationFab} hitSlop={10}>
+            <Text style={styles.myLocationFabText}>
+              {gettingLocation ? '…' : '⌖'}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setMapExpanded((v) => !v)}
+            style={styles.expandHandle}
+            hitSlop={10}
+          >
+            <Text style={styles.expandHandleText}>
+              {mapExpanded ? '⌃' : '⌄'}
+            </Text>
+          </Pressable>
+
+          {shopsWithCoords.length === 0 && (
+            <View style={styles.mapOverlay}>
+              <Text style={styles.mapOverlayTitle}>Няма координати за обектите</Text>
+              <Text style={styles.mapOverlayText}>
+                Добави lat/lng в базата, за да се показват на картата.
+              </Text>
+            </View>
+          )}
+
+          {locDenied && (
+            <View style={styles.locOverlay}>
+              <Text style={styles.locOverlayTitle}>Локацията е изключена</Text>
+              <Text style={styles.locOverlayText}>
+                Разреши Location, за да виждаш текущото си местоположение.
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      {/* MAP */}
-      <View style={styles.mapWrap}>
-        <MapView
-          ref={mapRef}
-          style={StyleSheet.absoluteFill}
-          provider={PROVIDER_GOOGLE}
-          initialRegion={initialRegion}
-        >
-          {/* USER MARKER */}
-          {userCoords && (
-            <Marker
-              coordinate={userCoords}
-              title="Ти си тук"
-              pinColor="#f59e0b" // жълто/оранжево
-            />
-          )}
-
-          {/* SHOPS MARKERS */}
-          {shopsWithCoords.map(({ shop, coords }) => {
-            const city = norm(shop?.city);
-            const store = norm(shop?.store);
-            const title = [city, store].filter(Boolean).join(' • ') || 'Обект';
-
-            return (
-              <Marker
-                key={String(shop?.id)}
-                coordinate={coords}
-                title={title}
-                description={norm(shop?.address)}
-                onPress={() => setSelectedId(shop?.id)}
-              />
-            );
-          })}
-        </MapView>
-
-        {/* BUTTON: MY LOCATION */}
-        <Pressable onPress={focusOnMe} style={styles.myLocBtn}>
-          <Text style={styles.myLocText}>Моята локация</Text>
-        </Pressable>
-
-        {/* Ако няма координати за магазини */}
-        {shopsWithCoords.length === 0 && (
-          <View style={styles.mapOverlay}>
-            <Text style={styles.mapOverlayTitle}>Няма координати за обектите</Text>
-            <Text style={styles.mapOverlayText}>
-              Добави lat/lng в базата (или направи geocoding), за да се показват на картата.
-            </Text>
-          </View>
-        )}
-
-        {/* Ако локацията е отказана */}
-        {locDenied && (
-          <View style={styles.locOverlay}>
-            <Text style={styles.locOverlayTitle}>Локацията е изключена</Text>
-            <Text style={styles.locOverlayText}>
-              Разреши Location, за да виждаш “Ти си тук”.
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* LIST */}
       <FlatList
         data={filteredShops}
         keyExtractor={(item) => String(item.id)}
@@ -387,110 +394,181 @@ export default function ShopsListScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f8f8' },
-
-  mapWrap: {
-    height: 230,
-    backgroundColor: '#e5e7eb',
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
   },
 
-  myLocBtn: {
+  headerBlock: {
+    backgroundColor: '#f8fafc',
+  },
+
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 24,
+  },
+
+  searchWrap: {
+    paddingHorizontal: 0,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 46,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '600',
+    paddingVertical: 10,
+  },
+
+  clearBtnWrap: {
+    marginLeft: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+
+  clearBtn: {
+    fontSize: 16,
+    color: '#94a3b8',
+    fontWeight: '900',
+  },
+
+  mapOuter: {
+    paddingBottom: 6,
+    backgroundColor: '#f8fafc',
+  },
+
+  mapCard: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    backgroundColor: '#e5e7eb',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+
+  myLocationFab: {
     position: 'absolute',
-    right: 12,
     top: 12,
-    height: 38,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
-  myLocText: { fontSize: 12, fontWeight: '900', color: '#111827' },
+
+  myLocationFabText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#111827',
+  },
+
+  expandHandle: {
+    position: 'absolute',
+    bottom: 8,
+    alignSelf: 'center',
+    minWidth: 44,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 999,
+  },
+
+  expandHandleText: {
+    fontSize: 18,
+    lineHeight: 18,
+    fontWeight: '900',
+    color: '#111827',
+  },
 
   mapOverlay: {
     position: 'absolute',
     left: 12,
     right: 12,
     bottom: 12,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: 'rgba(255,255,255,0.94)',
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  mapOverlayTitle: { fontSize: 13, fontWeight: '900', color: '#111827', marginBottom: 4 },
-  mapOverlayText: { fontSize: 12, color: '#475569', fontWeight: '700' },
+
+  mapOverlayTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#111827',
+    marginBottom: 4,
+  },
+
+  mapOverlayText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#475569',
+    fontWeight: '700',
+  },
 
   locOverlay: {
     position: 'absolute',
     left: 12,
     right: 12,
     bottom: 12,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: 'rgba(255,255,255,0.94)',
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  locOverlayTitle: { fontSize: 13, fontWeight: '900', color: '#111827', marginBottom: 4 },
-  locOverlayText: { fontSize: 12, color: '#475569', fontWeight: '700' },
 
-  listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 24,
-    gap: 12,
-  },
-
-  searchWrap: {
-    backgroundColor: '#f8f8f8',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 10,
-    gap: 8,
-  },
-
-  pageTitle: {
-    fontSize: 18,
+  locOverlayTitle: {
+    fontSize: 13,
     fontWeight: '900',
     color: '#111827',
+    marginBottom: 4,
   },
 
-  searchInput: {
-    height: 44,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    fontSize: 14,
-    color: '#111827',
-  },
-
-  resultHint: {
+  locOverlayText: {
     fontSize: 12,
-    fontWeight: '800',
-    color: '#64748b',
+    lineHeight: 18,
+    color: '#475569',
+    fontWeight: '700',
   },
 
   card: {
-    borderRadius: 16,
-    backgroundColor: '#fff',
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 12,
-    gap: 10,
+    borderColor: '#e2e8f0',
+    padding: 14,
+    marginBottom: 12,
   },
 
   cardSelected: {
-    borderColor: '#6366f1',
+    borderColor: '#111827',
+    backgroundColor: '#fbfdff',
+  },
+
+  cardContent: {
+    gap: 6,
   },
 
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 10,
   },
@@ -498,62 +576,109 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     fontSize: 15,
+    lineHeight: 21,
     fontWeight: '800',
     color: '#111827',
   },
 
   pinBadge: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#111827',
+    fontSize: 13,
   },
 
-  meta: { fontSize: 13, color: '#334155' },
+  meta: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#334155',
+  },
 
-  workTime: { fontSize: 13, color: '#0f172a', fontWeight: '700' },
+  workTime: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#0f172a',
+    fontWeight: '700',
+  },
 
-  desc: { fontSize: 13, color: '#64748b' },
+  desc: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#64748b',
+  },
 
   actionsRow: {
+    marginTop: 12,
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+
+  btnGhost: {
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+
+  btnGhostText: {
+    color: '#111827',
+    fontWeight: '800',
+    fontSize: 12,
   },
 
   btnPrimary: {
-    flex: 1,
     height: 40,
+    paddingHorizontal: 12,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6366f1',
+    backgroundColor: '#111827',
   },
-  btnPrimaryText: { color: '#fff', fontWeight: '900', fontSize: 13 },
 
-  btnGhost: {
-    width: 110,
+  btnPrimaryText: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 12,
+  },
+
+  btnOutline: {
     height: 40,
+    paddingHorizontal: 12,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#fff',
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
   },
-  btnGhostText: { color: '#111827', fontWeight: '900', fontSize: 13 },
+
+  btnOutlineText: {
+    color: '#111827',
+    fontWeight: '800',
+    fontSize: 12,
+  },
 
   emptyWrap: {
-    marginTop: 30,
-    borderRadius: 16,
-    backgroundColor: '#fff',
+    marginTop: 18,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 14,
+    borderColor: '#e2e8f0',
+    padding: 16,
   },
+
   emptyTitle: {
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '900',
     color: '#111827',
     marginBottom: 4,
   },
-  emptyText: { fontSize: 13, color: '#64748b' },
+
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#64748b',
+  },
 });

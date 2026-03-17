@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,15 @@ import {
   FlatList,
   Dimensions,
   RefreshControl,
-  TouchableOpacity,
+  Pressable,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { promoCodesApi } from '../../Api';
 import PromoCodeCard from '../../components/PromoCodeCard.jsx';
+import TopBrandBar from '../../components/TopBrandBar';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const H_PADDING = 16;
@@ -28,27 +31,41 @@ export default function PromoCodesListScreen() {
 
   const [items, setItems] = useState([]);
   const [tab, setTab] = useState('weekly');
+
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(false);
+
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Сървърно дърпим "всички видими" (public + assigned) и после филтрираме локално по таб.
-  // Така "Персонални" ще работи истински (is_personal=1), а не през category.
-  useEffect(() => {
-    loadItems(1, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const filtered = useMemo(() => {
+    const arr = Array.isArray(items) ? items : [];
 
-  async function loadItems(pageToLoad = 1, reset = false) {
-    if (loading) return;
-    setLoading(true);
+    if (tab === 'personal') {
+      return arr.filter((x) => Number(x?.is_personal) === 1);
+    }
+
+    return arr.filter((x) => Number(x?.category) === 1);
+  }, [items, tab]);
+
+  const currentTabText =
+    tab === 'weekly'
+      ? 'Седмични оферти и актуални предложения.'
+      : 'Твоите персонални промо кодове и специални оферти.';
+
+  const loadItems = useCallback(async (pageToLoad = 1, mode = 'initial') => {
+    if (mode === 'loadMore' && loadingMore) return;
+
+    if (mode === 'initial') setInitialLoading(true);
+    if (mode === 'refresh') setRefreshing(true);
+    if (mode === 'loadMore') setLoadingMore(true);
 
     try {
       const result = await promoCodesApi.getAll({
         page: pageToLoad,
         limit: 30,
-        category: null, // не филтрираме по категория от API
+        category: null,
       });
 
       const data = result?.data?.data ?? [];
@@ -57,37 +74,41 @@ export default function PromoCodesListScreen() {
       setTotalPages(meta.pages ?? 1);
       setPage(pageToLoad);
 
-      if (reset) setItems(data);
-      else setItems((prev) => [...prev, ...data]);
+      if (mode === 'initial' || mode === 'refresh') {
+        setItems(data);
+      } else {
+        setItems((prev) => {
+          const prevIds = new Set(prev.map((x) => String(x.id)));
+          const next = data.filter((x) => !prevIds.has(String(x.id)));
+          return [...prev, ...next];
+        });
+      }
     } catch (e) {
-      alert('Проблем със зареждането на промо кодовете.');
+      Alert.alert('Грешка', 'Проблем със зареждането на промо кодовете.');
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
-  }
+  }, [loadingMore]);
+
+  useEffect(() => {
+    loadItems(1, 'initial');
+  }, [loadItems]);
 
   function handleLoadMore() {
-    if (page < totalPages && !loading) loadItems(page + 1);
+    if (page < totalPages && !loadingMore && !initialLoading && !refreshing) {
+      loadItems(page + 1, 'loadMore');
+    }
   }
 
   function handleRefresh() {
-    setRefreshing(true);
-    loadItems(1, true);
+    loadItems(1, 'refresh');
   }
-
-  const filtered = useMemo(() => {
-    const arr = Array.isArray(items) ? items : [];
-    if (tab === 'personal') {
-      return arr.filter((x) => Number(x?.is_personal) === 1);
-    }
-    // weekly
-    return arr.filter((x) => Number(x?.category) === 1);
-  }, [items, tab]);
 
   function renderItem({ item }) {
     return (
-      <View style={{ width: ITEM_WIDTH, marginBottom: GAP }}>
+      <View style={styles.itemWrap}>
         <PromoCodeCard
           {...item}
           onPress={(id) => navigation.navigate('PromoCodeDetails', { id })}
@@ -96,131 +117,287 @@ export default function PromoCodesListScreen() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.h1}>Промо кодове</Text>
-        <Text style={styles.sub}>
+  function renderHeader() {
+    return (
+      <View style={styles.headerWrap}>
+        <View style={styles.header}>
+          <Text style={styles.h1}>Промо кодове</Text>
+          <Text style={styles.sub}>{currentTabText}</Text>
+
+          {!initialLoading ? (
+            <View style={styles.counterPill}>
+              <Text style={styles.counterText}>
+                {filtered.length} {filtered.length === 1 ? 'активен код' : 'активни кода'}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.tabsShell}>
+          <View style={styles.tabs}>
+            {TABS.map((t) => {
+              const active = t.value === tab;
+
+              return (
+                <Pressable
+                  key={t.value}
+                  onPress={() => setTab(t.value)}
+                  style={({ pressed }) => [
+                    styles.tab,
+                    active && styles.tabActive,
+                    pressed && styles.tabPressed,
+                  ]}
+                >
+                  <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                    {t.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  function renderEmpty() {
+    if (initialLoading) return null;
+
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyIcon}>
+          {tab === 'weekly' ? '🏷️' : '🎁'}
+        </Text>
+
+        <Text style={styles.emptyTitle}>
           {tab === 'weekly'
-            ? 'Седмични оферти.'
-            : 'Твоите персонални кодове.'}
+            ? 'Няма активни седмични кодове'
+            : 'Нямаш персонални кодове'}
+        </Text>
+
+        <Text style={styles.emptyText}>
+          {tab === 'personal'
+            ? 'Когато има специални предложения за теб, ще се появят тук.'
+            : 'Провери отново по-късно за нови седмични оферти.'}
         </Text>
       </View>
+    );
+  }
 
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        {TABS.map((t) => {
-          const active = t.value === tab;
-          return (
-            <TouchableOpacity
-              key={t.value}
-              style={[styles.tab, active && styles.tabActive]}
-              onPress={() => setTab(t.value)}
-            >
-              <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                {t.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+  if (initialLoading) {
+    return (
+      <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+        <TopBrandBar />
 
-      {/* Empty state */}
-      {!loading && filtered.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>
-            {tab === 'weekly' ? 'Няма активни седмични кодове.' : 'Нямаш персонални кодове.'}
-          </Text>
-          <Text style={styles.emptyText}>
-            {tab === 'personal'
-              ? 'Когато има специални предложения за теб, ще се появят тук.'
-              : 'Провери пак по-късно.'}
-          </Text>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <Text style={styles.h1}>Промо кодове</Text>
+            <Text style={styles.sub}>Зареждане на активните предложения...</Text>
+          </View>
+
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color="#dc2626" />
+            <Text style={styles.loadingText}>Моля, изчакай момент...</Text>
+          </View>
         </View>
-      ) : null}
+      </SafeAreaView>
+    );
+  }
 
-      {/* Grid */}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderItem}
-        numColumns={2}
-        columnWrapperStyle={{
-          justifyContent: 'space-between',
-          paddingHorizontal: H_PADDING,
-        }}
-        contentContainerStyle={{
-          paddingTop: 8,
-          paddingBottom: 40,
-        }}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.3}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-        ListFooterComponent={
-          loading ? (
-            <View style={{ paddingVertical: 16 }}>
-              <ActivityIndicator />
-            </View>
-          ) : null
-        }
-        showsVerticalScrollIndicator={false}
-      />
-    </View>
+  return (
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+      <TopBrandBar />
+
+      <View style={styles.container}>
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderItem}
+          numColumns={2}
+          columnWrapperStyle={filtered.length > 0 ? styles.columnWrap : undefined}
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={renderEmpty}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.3}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footerLoader}>
+                <ActivityIndicator />
+              </View>
+            ) : (
+              <View style={styles.footerSpace} />
+            )
+          }
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f8f8' },
+  safe: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+
+  headerWrap: {
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
 
   header: {
     paddingHorizontal: H_PADDING,
-    paddingTop: 12,
-    paddingBottom: 6,
   },
+
   h1: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '900',
-    color: '#111827',
+    color: '#0f172a',
   },
+
   sub: {
-    marginTop: 4,
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#6b7280',
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#64748b',
+  },
+
+  counterPill: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#fee2e2',
+  },
+
+  counterText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#b91c1c',
+  },
+
+  tabsShell: {
+    paddingHorizontal: H_PADDING,
+    marginTop: 14,
   },
 
   tabs: {
     flexDirection: 'row',
-    paddingHorizontal: H_PADDING,
-    paddingVertical: 10,
-    gap: 10,
+    backgroundColor: '#eef2f7',
+    borderRadius: 18,
+    padding: 4,
+    gap: 6,
   },
 
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: '#e5e7eb',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
 
-  tabActive: { backgroundColor: '#6366f1' },
+  tabActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
 
-  tabText: { fontSize: 14, fontWeight: '800', color: '#374151' },
+  tabPressed: {
+    opacity: 0.92,
+  },
 
-  tabTextActive: { color: '#fff' },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#475569',
+  },
+
+  tabTextActive: {
+    color: '#111827',
+  },
+
+  listContent: {
+    paddingBottom: 28,
+    paddingTop: 2,
+  },
+
+  columnWrap: {
+    justifyContent: 'space-between',
+    paddingHorizontal: H_PADDING,
+  },
+
+  itemWrap: {
+    width: ITEM_WIDTH,
+    marginBottom: GAP,
+  },
 
   empty: {
     marginHorizontal: H_PADDING,
-    marginTop: 10,
-    marginBottom: 4,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 14,
+    marginTop: 20,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingVertical: 26,
+    paddingHorizontal: 18,
+    alignItems: 'center',
   },
-  emptyTitle: { fontSize: 15, fontWeight: '900', color: '#111827' },
-  emptyText: { marginTop: 4, fontSize: 13, color: '#6b7280', lineHeight: 18 },
+
+  emptyIcon: {
+    fontSize: 28,
+    marginBottom: 10,
+  },
+
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#111827',
+    textAlign: 'center',
+  },
+
+  emptyText: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+
+  loadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+
+  footerLoader: {
+    paddingVertical: 18,
+  },
+
+  footerSpace: {
+    height: 18,
+  },
 });

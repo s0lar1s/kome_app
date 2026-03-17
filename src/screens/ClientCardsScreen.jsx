@@ -19,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../contexts/auth/useAuth.js";
 import { clientCardsApi } from "../Api/index.js";
+import TopBrandBar from '../components/TopBrandBar';
 
 function maskCard(ccnum) {
   const s = String(ccnum ?? "");
@@ -198,7 +199,9 @@ export default function ClientCardsScreen() {
   const goVirtual = () => navigation.navigate("VirtualCardCreate");
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+      <TopBrandBar />
+
       <RNStatusBar barStyle="dark-content" />
 
       <ScrollView

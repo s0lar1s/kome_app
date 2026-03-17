@@ -108,17 +108,18 @@ export default function BrochuresScreen({ route }) {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
       <View style={styles.container}>
-        <View style={styles.infoBar}>
-          <View style={styles.infoTextWrap}>
-            <Text style={styles.title} numberOfLines={1}>
-              {brochure?.title || 'Седмична брошура'}
-            </Text>
-            {validUntil ? (
-              <Text style={styles.metaText}>Валидна до {validUntil}</Text>
-            ) : (
-              <Text style={styles.metaText}>Актуални предложения</Text>
-            )}
+        <View style={styles.topCard}>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>Актуална брошура</Text>
           </View>
+
+          <Text style={styles.title} numberOfLines={2}>
+            {brochure?.title || 'Седмична брошура'}
+          </Text>
+
+          <Text style={styles.subtitle}>
+            Разгледай всички страници и актуалните предложения
+          </Text>
         </View>
 
         <View style={styles.viewerWrap}>
@@ -146,7 +147,9 @@ export default function BrochuresScreen({ route }) {
             <View style={styles.centerStateWrap}>
               <View style={styles.stateCard}>
                 <Text style={styles.stateIcon}>📄</Text>
-                <Text style={styles.errorTitle}>Няма PDF за показване</Text>
+                <Text style={styles.errorTitle}>
+                  Няма PDF за показване
+                </Text>
                 <Text style={styles.errorText}>
                   В момента брошурата не може да бъде заредена. Обнови и опитай отново.
                 </Text>
@@ -167,7 +170,9 @@ export default function BrochuresScreen({ route }) {
               <View style={styles.loadingCard}>
                 <ActivityIndicator size="large" color="#dc2626" />
                 <Text style={styles.overlayTitle}>Зареждане на брошурата</Text>
-                <Text style={styles.overlayText}>Моля, изчакай момент...</Text>
+                <Text style={styles.overlayText}>
+                  Моля, изчакай момент...
+                </Text>
               </View>
             </View>
           )}
@@ -192,6 +197,20 @@ export default function BrochuresScreen({ route }) {
             </View>
           )}
         </View>
+
+        <View style={styles.bottomCard}>
+          {validUntil ? (
+            <>
+              <Text style={styles.footerLabel}>Валидност</Text>
+              <Text style={styles.footerValue}>до {validUntil}</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.footerLabel}>Информация</Text>
+              <Text style={styles.footerMuted}>Няма посочена крайна дата</Text>
+            </>
+          )}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -208,58 +227,64 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
 
-  infoBar: {
-    marginHorizontal: 12,
-    marginTop: 8,
-    marginBottom: 8,
+  topCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 12,
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     shadowColor: '#0f172a',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
 
-  infoTextWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  badge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: 10,
+  },
+
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#b91c1c',
   },
 
   title: {
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 21,
+    lineHeight: 27,
     fontWeight: '800',
     color: '#0f172a',
-    textAlign: 'center',
   },
 
-  metaText: {
-    marginTop: 4,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
+  subtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
     color: '#64748b',
-    textAlign: 'center',
   },
 
   viewerWrap: {
     flex: 1,
-    marginHorizontal: 12,
-    marginBottom: 12,
-    borderRadius: 18,
+    marginHorizontal: 16,
+    borderRadius: 22,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#e2e8f0',
     shadowColor: '#0f172a',
     shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
     elevation: 2,
   },
 
@@ -268,9 +293,47 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
 
+  bottomCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+
+  footerLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+
+  footerValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+
+  footerMuted: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(248, 250, 252, 0.92)',
+    backgroundColor: 'rgba(248, 250, 252, 0.94)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
@@ -278,24 +341,24 @@ const styles = StyleSheet.create({
 
   loadingCard: {
     width: '100%',
-    maxWidth: 320,
+    maxWidth: 340,
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 22,
+    borderRadius: 22,
+    paddingHorizontal: 22,
+    paddingVertical: 24,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#e2e8f0',
     shadowColor: '#0f172a',
     shadowOpacity: 0.08,
-    shadowRadius: 14,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 3,
   },
 
   overlayTitle: {
     marginTop: 14,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
     color: '#0f172a',
     textAlign: 'center',
@@ -320,7 +383,7 @@ const styles = StyleSheet.create({
   stateCard: {
     width: '100%',
     backgroundColor: '#ffffff',
-    borderRadius: 20,
+    borderRadius: 22,
     paddingHorizontal: 22,
     paddingVertical: 26,
     alignItems: 'center',
@@ -328,7 +391,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     shadowColor: '#0f172a',
     shadowOpacity: 0.06,
-    shadowRadius: 12,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 2,
   },

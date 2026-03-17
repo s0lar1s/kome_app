@@ -10,8 +10,10 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { brochuresApi } from '../../Api';
+import TopBrandBar from '../../components/TopBrandBar';
 
 const BROCHURES_BASE = 'https://kome.bg/komeadmin/brochures/images/';
 
@@ -110,9 +112,9 @@ export default function BrochuresListScreen() {
     );
   };
 
-  const ListHeader = () => (
-    <View style={styles.headerWrap}>
-      {/* <Text style={styles.pageTitle}>Актуални брошури</Text> */}
+  const renderListHeader = () => (
+    <View style={styles.screenHeader}>
+      <Text style={styles.pageTitle}>Актуални брошури 2026</Text>
       <Text style={styles.pageSubtitle}>
         Разгледай последните оферти и промоции
       </Text>
@@ -127,43 +129,57 @@ export default function BrochuresListScreen() {
     </View>
   );
 
-  if (loading && !refreshing) {
+  const renderEmpty = () => {
+    if (refreshing) return null;
+
     return (
-      <View style={styles.loadingWrap}>
-        <ActivityIndicator size="large" color="#dc2626" />
-        <Text style={styles.loadingText}>Зареждане на брошурите...</Text>
+      <View style={styles.emptyWrap}>
+        <Text style={styles.emptyTitle}>Няма активни брошури</Text>
+        <Text style={styles.emptyText}>
+          В момента няма публикувани активни брошури. Провери по-късно.
+        </Text>
       </View>
     );
-  }
+  };
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={activeBrochures}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => fetchData(true)} />
-        }
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={
-          !refreshing ? (
-            <View style={styles.emptyWrap}>
-              <Text style={styles.emptyTitle}>Няма активни брошури</Text>
-              <Text style={styles.emptyText}>
-                В момента няма публикувани активни брошури. Провери по-късно.
-              </Text>
-            </View>
-          ) : null
-        }
-      />
-    </View>
+    <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
+      <TopBrandBar />
+
+      {loading && !refreshing ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#dc2626" />
+          <Text style={styles.loadingText}>Зареждане на брошурите...</Text>
+        </View>
+      ) : (
+        <View style={styles.container}>
+          <FlatList
+            data={activeBrochures}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderItem}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => fetchData(true)}
+              />
+            }
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={renderListHeader}
+            ListEmptyComponent={renderEmpty}
+          />
+        </View>
+      )}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
@@ -175,13 +191,13 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
   },
 
-  headerWrap: {
+  screenHeader: {
     marginBottom: 16,
   },
 
   pageTitle: {
     fontSize: 24,
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#0f172a',
   },
 
@@ -203,7 +219,7 @@ const styles = StyleSheet.create({
 
   counterText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#b91c1c',
   },
 
