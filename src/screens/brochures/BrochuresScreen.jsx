@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  Text,
+  TouchableOpacity,
+  Platform,
+  SafeAreaView,
+  StatusBar,
+} from 'react-native';
 import { WebView } from 'react-native-webview';
 import { brochuresApi } from '../../Api';
 
@@ -18,6 +27,18 @@ function toUrl(base, value) {
     .join('/');
 
   return base + encoded;
+}
+
+function formatDate(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return dateString;
+
+  return date.toLocaleDateString('bg-BG', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 }
 
 export default function BrochuresScreen({ route }) {
@@ -54,6 +75,7 @@ export default function BrochuresScreen({ route }) {
         if (mounted) {
           setBrochure(data);
           setPdfUrl(url);
+          setFailed(!url);
         }
       } catch (e) {
         if (mounted) setFailed(true);
@@ -63,6 +85,7 @@ export default function BrochuresScreen({ route }) {
     }
 
     load();
+
     return () => {
       mounted = false;
     };
@@ -79,130 +102,280 @@ export default function BrochuresScreen({ route }) {
 
   const onRetry = () => setReloadKey((k) => k + 1);
 
+  const validUntil = brochure?.date_end ? formatDate(brochure.date_end) : '';
+
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{brochure?.title || 'Седмична брошура'}</Text>
-        {/* {brochure?.category ? <Text style={styles.title2}>Категория: {brochure.category}</Text> : null} */}
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
+      <View style={styles.container}>
+        <View style={styles.infoBar}>
+          <View style={styles.infoTextWrap}>
+            <Text style={styles.title} numberOfLines={1}>
+              {brochure?.title || 'Седмична брошура'}
+            </Text>
+            {validUntil ? (
+              <Text style={styles.metaText}>Валидна до {validUntil}</Text>
+            ) : (
+              <Text style={styles.metaText}>Актуални предложения</Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.viewerWrap}>
+          {viewerUrl && !failed ? (
+            <WebView
+              key={`${reloadKey}-${viewerUrl}`}
+              source={{ uri: viewerUrl }}
+              onLoadStart={() => {
+                setLoading(true);
+                setFailed(false);
+              }}
+              onLoadEnd={() => setLoading(false)}
+              onError={() => {
+                setLoading(false);
+                setFailed(true);
+              }}
+              startInLoadingState={false}
+              javaScriptEnabled
+              domStorageEnabled
+              allowsBackForwardNavigationGestures
+              setSupportMultipleWindows={false}
+              style={styles.webview}
+            />
+          ) : (
+            <View style={styles.centerStateWrap}>
+              <View style={styles.stateCard}>
+                <Text style={styles.stateIcon}>📄</Text>
+                <Text style={styles.errorTitle}>Няма PDF за показване</Text>
+                <Text style={styles.errorText}>
+                  В момента брошурата не може да бъде заредена. Обнови и опитай отново.
+                </Text>
+
+                <TouchableOpacity
+                  onPress={onRetry}
+                  activeOpacity={0.88}
+                  style={styles.retryBtn}
+                >
+                  <Text style={styles.retryText}>Обнови</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {loading && (
+            <View style={styles.overlay}>
+              <View style={styles.loadingCard}>
+                <ActivityIndicator size="large" color="#dc2626" />
+                <Text style={styles.overlayTitle}>Зареждане на брошурата</Text>
+                <Text style={styles.overlayText}>Моля, изчакай момент...</Text>
+              </View>
+            </View>
+          )}
+
+          {failed && !loading && (
+            <View style={styles.overlay}>
+              <View style={styles.loadingCard}>
+                <Text style={styles.stateIcon}>⚠️</Text>
+                <Text style={styles.overlayTitle}>Не успях да заредя брошурата</Text>
+                <Text style={styles.overlayText}>
+                  Провери връзката си и опитай отново.
+                </Text>
+
+                <TouchableOpacity
+                  onPress={onRetry}
+                  activeOpacity={0.88}
+                  style={[styles.retryBtn, styles.retryBtnOverlay]}
+                >
+                  <Text style={styles.retryText}>Опитай пак</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
       </View>
-
-      {viewerUrl ? (
-        <WebView
-          key={`${reloadKey}-${viewerUrl}`}
-          source={{ uri: viewerUrl }}
-          onLoadStart={() => {
-            setLoading(true);
-            setFailed(false);
-          }}
-          onLoadEnd={() => setLoading(false)}
-          onError={() => {
-            setLoading(false);
-            setFailed(true);
-          }}
-          startInLoadingState
-          javaScriptEnabled
-          domStorageEnabled
-          allowsBackForwardNavigationGestures
-          setSupportMultipleWindows={false}
-        />
-      ) : (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorTitle}>Няма PDF за показване.</Text>
-          <TouchableOpacity onPress={onRetry} activeOpacity={0.85} style={styles.retryBtn}>
-            <Text style={styles.retryText}>Обнови</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {loading && (
-        <View style={styles.overlay}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.overlayText}>Зареждане…</Text>
-        </View>
-      )}
-
-      {failed && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorTitle}>Не успях да заредя брошурата.</Text>
-          <TouchableOpacity onPress={onRetry} activeOpacity={0.85} style={styles.retryBtn}>
-            <Text style={styles.retryText}>Опитай пак</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      <View style={styles.footer}>
-        {brochure?.date_end ? (
-          <Text style={styles.title}>
-            Валидна до {brochure.date_end}
-          </Text>
-        ) : null}
-      </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eef2f7',
-    backgroundColor: '#fff',
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
   },
 
-  footer: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eef2f7',
-    backgroundColor: '#fff',
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+
+  infoBar: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+
+  infoTextWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   title: {
-    fontSize: 18,
+    fontSize: 16,
+    lineHeight: 20,
     fontWeight: '800',
-    color: '#1e293b',
+    color: '#0f172a',
     textAlign: 'center',
   },
-  title2: {
-    marginTop: 6,
-    fontSize: 13,
-    fontWeight: '700',
+
+  metaText: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
     color: '#64748b',
     textAlign: 'center',
   },
 
+  viewerWrap: {
+    flex: 1,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+
+  webview: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  overlayText: { fontSize: 14, color: '#64748b' },
-
-  errorBox: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(248, 250, 252, 0.92)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
-    gap: 14,
   },
-  errorTitle: {
+
+  loadingCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+
+  overlayTitle: {
+    marginTop: 14,
     fontSize: 16,
     fontWeight: '800',
     color: '#0f172a',
     textAlign: 'center',
   },
-  retryBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: '#6366f1',
+
+  overlayText: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#64748b',
+    textAlign: 'center',
   },
-  retryText: { color: '#fff', fontWeight: '800' },
+
+  centerStateWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+    backgroundColor: '#f8fafc',
+  },
+
+  stateCard: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    paddingHorizontal: 22,
+    paddingVertical: 26,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+
+  stateIcon: {
+    fontSize: 30,
+    marginBottom: 10,
+  },
+
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+
+  errorText: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+
+  retryBtn: {
+    marginTop: 18,
+    minWidth: 140,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#991b1b',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+
+  retryBtnOverlay: {
+    marginTop: 16,
+  },
+
+  retryText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
 });
